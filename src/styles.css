@@ -1,0 +1,273 @@
+#preply-plus-root {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 24px 0;
+  padding: 24px;
+  border: 1px solid #d8e1ef;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #111827;
+  font-family: Inter, Arial, sans-serif;
+  box-shadow: 0 8px 24px rgba(17, 24, 39, 0.08);
+}
+
+#preply-plus-root *,
+#preply-plus-root *::before,
+#preply-plus-root *::after {
+  box-sizing: border-box;
+}
+
+.pp-header {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.pp-header h2 {
+  margin: 0 0 4px;
+  color: #111827;
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.pp-header p,
+.pp-status,
+.pp-card small,
+.pp-insight small,
+.pp-empty {
+  color: #5f6b7a;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.pp-header p,
+.pp-status {
+  margin: 0;
+}
+
+#pp-refresh {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0450b4;
+  cursor: pointer;
+  font-size: 20px;
+}
+
+#pp-refresh:hover {
+  background: #f4f8ff;
+}
+
+.pp-content {
+  margin-top: 18px;
+}
+
+.pp-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.pp-card,
+.pp-panel,
+.pp-insight {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.pp-card {
+  min-height: 118px;
+  padding: 16px;
+}
+
+.pp-card span,
+.pp-insight span {
+  display: block;
+  color: #526071;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.pp-card strong {
+  display: block;
+  margin: 10px 0 6px;
+  color: #0f172a;
+  font-size: 28px;
+  line-height: 1.15;
+}
+
+.pp-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.pp-panel {
+  padding: 16px;
+  overflow: hidden;
+}
+
+.pp-wide-panel {
+  margin-top: 8px;
+}
+
+.pp-panel h3 {
+  margin: 0 0 12px;
+  color: #111827;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.pp-panel-heading {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.pp-panel-heading h3 {
+  margin: 0;
+}
+
+.pp-pager {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 8px;
+  align-items: center;
+  color: #526071;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.pp-pager button {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0450b4;
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.pp-pager button:hover:not(:disabled) {
+  background: #f4f8ff;
+}
+
+.pp-pager button:disabled {
+  color: #94a3b8;
+  cursor: default;
+  opacity: 0.55;
+}
+
+.pp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.pp-table th,
+.pp-table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.pp-table th {
+  color: #526071;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.pp-table td:nth-child(3),
+.pp-table td:nth-child(4),
+.pp-table td:nth-child(5),
+.pp-table td:nth-child(6),
+.pp-table td:nth-child(7) {
+  white-space: nowrap;
+}
+
+.pp-month-table th,
+.pp-month-table td {
+  text-align: right;
+}
+
+.pp-month-table th:first-child,
+.pp-month-table td:first-child {
+  text-align: left;
+}
+
+.pp-summary-row td {
+  border-top: 2px solid #cbd5e1;
+  background: #eef4fb;
+  font-weight: 700;
+}
+
+.pp-insights {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.pp-insight {
+  min-height: 92px;
+  padding: 12px;
+}
+
+.pp-insight strong {
+  display: block;
+  margin: 8px 0 4px;
+  color: #0f172a;
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.pp-empty {
+  margin: 0;
+}
+
+.pp-debug {
+  margin-top: 12px;
+  color: #5f6b7a;
+  font-size: 13px;
+}
+
+.pp-debug pre {
+  max-height: 180px;
+  overflow: auto;
+  padding: 12px;
+  border-radius: 8px;
+  background: #0f172a;
+  color: #e5e7eb;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 900px) {
+  #preply-plus-root {
+    padding: 16px;
+  }
+
+  .pp-grid,
+  .pp-split {
+    grid-template-columns: 1fr;
+  }
+
+  .pp-insights {
+    grid-template-columns: 1fr;
+  }
+}

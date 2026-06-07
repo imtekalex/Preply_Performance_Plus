@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Preply Performance Plus",
+  "description": "Adds income analytics and student benchmarking to the Preply performance page.",
+  "version": "0.1.0",
+  "permissions": ["storage"],
+  "host_permissions": ["https://preply.com/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://preply.com/*/performance*", "https://preply.com/de/performance*"],
+      "js": ["src/content.js"],
+      "css": ["src/styles.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["src/injected.js"],
+      "matches": ["https://preply.com/*"]
+    }
+  ]
+}
