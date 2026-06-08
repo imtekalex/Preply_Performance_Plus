@@ -2,6 +2,8 @@
   const ROOT_ID = "preply-plus-root";
   const MESSAGE_REQUEST = "PREPLY_PLUS_FETCH_REPORTS";
   const MESSAGE_RESPONSE = "PREPLY_PLUS_REPORTS_RESULT";
+  const STUDENT_MESSAGE_REQUEST = "PREPLY_PLUS_FETCH_STUDENTS";
+  const STUDENT_MESSAGE_RESPONSE = "PREPLY_PLUS_STUDENTS_RESULT";
   const DAY_MS = 24 * 60 * 60 * 1000;
   const CACHE_KEY = "preplyPlusTransactionCache";
   const CACHE_VERSION = 2;
@@ -51,6 +53,7 @@
 
   let lastState = null;
   let pendingRequest = null;
+  let pendingStudentRequest = null;
   let refreshTimer = null;
   let hasAutoLoaded = false;
   let isRefreshing = false;
@@ -108,14 +111,26 @@
 
   function installListeners() {
     window.addEventListener("message", (event) => {
-      if (event.source !== window || event.data?.type !== MESSAGE_RESPONSE) {
+      if (event.source !== window) {
         return;
       }
-      if (!pendingRequest || event.data.requestId !== pendingRequest.requestId) {
+
+      if (event.data?.type === MESSAGE_RESPONSE) {
+        if (!pendingRequest || event.data.requestId !== pendingRequest.requestId) {
+          return;
+        }
+        pendingRequest.resolve(event.data);
+        pendingRequest = null;
         return;
       }
-      pendingRequest.resolve(event.data);
-      pendingRequest = null;
+
+      if (event.data?.type === STUDENT_MESSAGE_RESPONSE) {
+        if (!pendingStudentRequest || event.data.requestId !== pendingStudentRequest.requestId) {
+          return;
+        }
+        pendingStudentRequest.resolve(event.data);
+        pendingStudentRequest = null;
+      }
     });
   }
 
@@ -355,16 +370,34 @@
   }
 
   async function requestActiveStudentsPage(offset, count) {
-    const response = await fetch(new URL("/graphql", window.location.origin).toString(), {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        Accept: "application/json",
-        "Apollo-Require-Preflight": "true",
-        "Content-Type": "application/json",
-        "X-Apollo-Operation-Name": "TutorStudentManagement"
-      },
-      body: JSON.stringify({
+    const requestId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+    return new Promise((resolve, reject) => {
+      const timeout = window.setTimeout(() => {
+        if (pendingStudentRequest?.requestId === requestId) {
+          pendingStudentRequest = null;
+        }
+        reject(new Error("Preply student request timed out"));
+      }, 20000);
+
+      pendingStudentRequest = {
+        requestId,
+        resolve: (value) => {
+          window.clearTimeout(timeout);
+          if (value.error) {
+            reject(new Error(value.error));
+            return;
+          }
+          resolve({
+            totalCount: value.totalCount || 0,
+            nodes: value.nodes || []
+          });
+        }
+      };
+
+      window.postMessage({
+        type: STUDENT_MESSAGE_REQUEST,
+        requestId,
         operationName: "TutorStudentManagement",
         variables: {
           offset,
@@ -375,24 +408,8 @@
           archivedByTutor: false
         },
         query: STUDENT_MANAGEMENT_QUERY
-      })
+      }, window.location.origin);
     });
-    const text = await response.text();
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${text.slice(0, 160)}`);
-    }
-
-    const payload = JSON.parse(text);
-    if (payload.errors?.length) {
-      throw new Error(payload.errors.map((error) => error.message).join("; "));
-    }
-
-    const tutorings = payload.data?.currentUser?.tutor?.studentManagementTutorings;
-    return {
-      totalCount: tutorings?.totalCount || 0,
-      nodes: tutorings?.nodes || []
-    };
   }
 
   function normalizeManagedStudent(node) {

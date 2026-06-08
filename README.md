@@ -20,7 +20,7 @@ That keeps the request authenticated with the existing Preply session and avoids
 
 The parser explicitly supports Preply CSV columns such as `Schüler`, `Datum der Einheit`, `Type`, `Earning, USD`, and `Lesson Price, USD`. It intentionally uses `Earning, USD` for tutor income and `Lesson Price, USD` for the current student price in the ranking.
 
-The extension also queries Preply's `TutorStudentManagement` GraphQL operation from the performance page session. That provides the current-student list, status, next lesson, and balance utilisation. The request includes Apollo CSRF preflight headers because Preply's GraphQL endpoint blocks ambiguous browser requests. When this request is available, active-student ranking and price benchmarking use Preply's current-student list instead of the CSV-only recent-lessons fallback.
+The extension also queries Preply's `TutorStudentManagement` GraphQL operation from a small page-context bridge. That provides the current-student list, status, next lesson, and balance utilisation. The request includes Apollo CSRF preflight headers because Preply's GraphQL endpoint blocks ambiguous browser requests. When this request is available, active-student ranking and price benchmarking use Preply's current-student list instead of the CSV-only recent-lessons fallback.
 
 The panel always shows an update timestamp in German, for example:
 
