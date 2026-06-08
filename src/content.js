@@ -156,7 +156,10 @@
     try {
       const visible = scrapeVisibleMetrics();
       const cache = await loadTransactionCache();
-      activeReportRanges = buildRanges(cache, { fetchLatest });
+      activeReportRanges = buildRanges(cache, {
+        fetchLatest,
+        historyStart: visible.memberSinceStart || DEFAULT_HISTORY_START
+      });
       let reportResult = { reports: [], errors: [] };
 
       if (activeReportRanges.length) {
@@ -401,7 +404,7 @@
     };
   }
 
-  function buildRanges(cache, { fetchLatest = false } = {}) {
+  function buildRanges(cache, { fetchLatest = false, historyStart = DEFAULT_HISTORY_START } = {}) {
     const { today } = getDateBoundaries();
     const todayISO = toISODate(today);
     const cachedEnd = cache?.end || "";
@@ -411,7 +414,7 @@
     }
 
     return [
-      { id: "sinceBeginning", start: fetchLatest && cachedEnd ? todayISO : cachedEnd || DEFAULT_HISTORY_START, end: todayISO }
+      { id: "sinceBeginning", start: fetchLatest && cachedEnd ? todayISO : cachedEnd || historyStart, end: todayISO }
     ];
   }
 
@@ -575,7 +578,8 @@
       totalEarnings: parseMoney(primaryMetricText('[data-qa-id="lifetime-performance-total-earnings"]')),
       lifetimeLessons: parseNumber(primaryMetricText('[data-qa-id="lifetime-performance-lessons-taught"]')),
       lifetimeHours: parseNumber(primaryMetricText('[data-qa-id="lifetime-performance-hours-taught"]')),
-      lifetimeStudents: parseNumber(primaryMetricText('[data-qa-id="lifetime-performance-total-students"]'))
+      lifetimeStudents: parseNumber(primaryMetricText('[data-qa-id="lifetime-performance-total-students"]')),
+      memberSinceStart: scrapeMemberSinceStartDate()
     };
   }
 
@@ -590,6 +594,43 @@
     }
 
     return root.querySelector("h1, h2, h3, [data-preply-ds-component='Heading']")?.textContent?.trim() || root.textContent?.trim() || "";
+  }
+
+  function scrapeMemberSinceStartDate() {
+    const text = document.body?.innerText || "";
+    const match = text.match(/seit\s+du\s+im\s+([A-Za-zÄÖÜäöüß]+)\s+(\d{4})\s+beigetreten\s+bist/i);
+    if (!match) {
+      return null;
+    }
+
+    const month = parseGermanMonth(match[1]);
+    const year = Number(match[2]);
+    if (!month || !year) {
+      return null;
+    }
+
+    return toISODate(new Date(year, month - 1, 1));
+  }
+
+  function parseGermanMonth(value) {
+    const normalized = value.toLocaleLowerCase("de-DE");
+    const months = {
+      januar: 1,
+      februar: 2,
+      märz: 3,
+      maerz: 3,
+      april: 4,
+      mai: 5,
+      juni: 6,
+      juli: 7,
+      august: 8,
+      september: 9,
+      oktober: 10,
+      november: 11,
+      dezember: 12
+    };
+
+    return months[normalized] || 0;
   }
 
   function buildState(visible, reportResult, studentResult = { students: [], errors: [] }) {
