@@ -1,6 +1,6 @@
 # Preply Performance Plus
 
-Chrome extension that augments `https://preply.com/de/performance` with income analytics, monthly projection, cached lifetime totals, student benchmarking, and price benchmarking.
+Chrome extension that augments `https://preply.com/de/performance` with income analytics, monthly projection, cached lifetime totals, yearly income views, student benchmarking, and price benchmarking.
 
 ## Install locally
 
@@ -29,11 +29,10 @@ The panel always shows an update timestamp in German, for example:
 ## Current metrics
 
 - Total income since the first cached CSV transaction
-- Average payout pro paid lesson for the current month
-- Average payout pro paid lesson since the first cached CSV transaction
+- Average payout pro paid lesson across the last three calendar months
 - Current month income
-- Monthly income breakdown by year
-- Year navigation for monthly income tables when multiple years are available
+- Yearly overview with monthly rows
+- Year navigation for yearly overview tables when multiple years are available
 - Projected month income
 - Average hourly rate when the CSV includes an actual duration column
 - Average lessons pro week when hour columns are unavailable

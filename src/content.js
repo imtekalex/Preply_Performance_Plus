@@ -338,10 +338,18 @@
       }
     }
 
+    const students = nodes.map(normalizeManagedStudent);
+    if (students.length && students.every((student) => !student.hasBalanceData)) {
+      errors.push({
+        id: "TutorStudentManagement.balanceUtilisation",
+        message: "Preply liefert die aktuelle Lernendenliste, aber keine balanceUtilisation-Werte. Für Genutzt/Gesamt brauche ich eine anonymisierte node aus der TutorStudentManagement-Antwort."
+      });
+    }
+
     return {
       source: nodes.length ? "studentManagement" : "fallback",
       totalCount: totalCount ?? nodes.length,
-      students: nodes.map(normalizeManagedStudent),
+      students,
       errors
     };
   }
@@ -386,9 +394,12 @@
   }
 
   function normalizeManagedStudent(node) {
-    const totalHours = Number(node.balanceUtilisation?.totalHours || 0);
-    const utilisedHours = Number(node.balanceUtilisation?.utilisedHours || 0);
-    const outstandingHours = Math.max(0, totalHours - utilisedHours);
+    const rawTotalHours = node.balanceUtilisation?.totalHours;
+    const rawUtilisedHours = node.balanceUtilisation?.utilisedHours;
+    const hasBalanceData = rawTotalHours != null || rawUtilisedHours != null;
+    const totalHours = Number(rawTotalHours || 0);
+    const utilisedHours = Number(rawUtilisedHours || 0);
+    const outstandingHours = hasBalanceData ? Math.max(0, totalHours - utilisedHours) : null;
     const names = [
       node.clientName,
       node.client?.user?.fullName,
@@ -403,6 +414,7 @@
       keys: [...new Set(names.map(normalizeStudentKey).filter(Boolean))],
       status: node.status || "",
       hasHoursToScheduleLesson: Boolean(node.hasHoursToScheduleLesson),
+      hasBalanceData,
       outstandingHours,
       totalHours,
       utilisedHours,
@@ -663,6 +675,12 @@
       boundaries.yearStart,
       boundaries.today
     ));
+    const trailingThreeMonthStart = new Date(boundaries.today.getFullYear(), boundaries.today.getMonth() - 2, 1);
+    const trailingThreeMonths = summarizeTransactions(filterTransactionsByDate(
+      allTransactions,
+      trailingThreeMonthStart,
+      boundaries.today
+    ));
     const source = allTime.transactions.length ? "report" : "visible";
     const totalIncome = allTime.income || visible.totalEarnings || yearToDate.income || visible.chartEarnings || visible.overviewEarnings;
     const monthlyIncome = currentMonth.income || visible.chartEarnings || visible.overviewEarnings;
@@ -671,8 +689,7 @@
     const activeStudents = studentResult.totalCount || visible.activeStudents || currentMonth.students || allTime.students;
     const projectedIncome = projectMonth(monthlyIncome);
     const monthlyHours = currentMonth.hours;
-    const avgPayoutCurrentMonth = currentMonth.paidLessons ? currentMonth.income / currentMonth.paidLessons : 0;
-    const avgPayoutAllTime = allTime.paidLessons ? allTime.income / allTime.paidLessons : 0;
+    const avgPayoutLastThreeMonths = trailingThreeMonths.paidLessons ? trailingThreeMonths.income / trailingThreeMonths.paidLessons : 0;
     const avgHourlyRate = monthlyHours ? monthlyIncome / monthlyHours : 0;
     const students = rankStudents(allTime.transactions.length ? allTime.transactions : currentMonth.transactions);
     const activeStudentsForBenchmark = filterActiveStudents(students, managedStudentMap);
@@ -698,8 +715,7 @@
         projectedIncome,
         totalIncome,
         yearToDateIncome: yearToDate.income,
-        avgPayoutCurrentMonth,
-        avgPayoutAllTime,
+        avgPayoutLastThreeMonths,
         avgHourlyRate,
         monthlyHours,
         avgWeeklyHours,
@@ -1034,6 +1050,7 @@
           income: 0,
           lessons: 0,
           paidLessons: 0,
+          hasBalanceData: false,
           outstandingHours: 0,
           totalHours: 0,
           utilisedHours: 0,
@@ -1046,6 +1063,7 @@
       group.income += student.income;
       group.lessons += student.lessons || student.transactions;
       group.paidLessons += student.paidLessons || 0;
+      group.hasBalanceData = group.hasBalanceData || student.hasBalanceData;
       group.outstandingHours += student.outstandingHours || 0;
       group.totalHours += student.totalHours || 0;
       group.utilisedHours += student.utilisedHours || 0;
@@ -1098,6 +1116,7 @@
               ...student,
               managedStatus: managedStudent.status,
               hasHoursToScheduleLesson: managedStudent.hasHoursToScheduleLesson,
+              hasBalanceData: managedStudent.hasBalanceData,
               outstandingHours: managedStudent.outstandingHours,
               totalHours: managedStudent.totalHours,
               utilisedHours: managedStudent.utilisedHours,
@@ -1210,13 +1229,13 @@
     content.innerHTML = `
       <div class="pp-grid">
         ${metricCard("Einnahmen gesamt", money(state.metrics.totalIncome), "seit Beginn")}
-        ${metricCard("Ø Auszahlung", `${money(state.metrics.avgPayoutCurrentMonth)} · ${money(state.metrics.avgPayoutAllTime)}`, "aktueller Monat · seit Beginn")}
+        ${metricCard("Ø Auszahlung", money(state.metrics.avgPayoutLastThreeMonths), "pro bezahlter Einheit in den letzten 3 Monaten")}
         ${metricCard("Prognose Monat", money(state.metrics.projectedIncome), "hochgerechnet bis Monatsende")}
         ${metricCard("Monatseinnahmen", money(state.metrics.monthlyIncome), deltaText(state.metrics.monthDelta))}
       </div>
       <div class="pp-panel pp-wide-panel">
         <div class="pp-panel-heading">
-          <h3>Monatseinnahmen</h3>
+          <h3>Jahresübersicht ${getSelectedMonthYear(state.monthlyBreakdown)}</h3>
           ${renderMonthPager(state.monthlyBreakdown)}
         </div>
         ${renderMonthlyBreakdown(state.monthlyBreakdown)}
@@ -1583,7 +1602,7 @@
   }
 
   function formatBalance(item) {
-    if (!item || (!item.totalHours && !item.utilisedHours)) {
+    if (!item?.hasBalanceData) {
       return "n/a";
     }
 
