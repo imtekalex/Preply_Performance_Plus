@@ -495,7 +495,9 @@
     const avgPayoutCurrentMonth = currentMonth.paidLessons ? currentMonth.income / currentMonth.paidLessons : 0;
     const avgPayoutAllTime = allTime.paidLessons ? allTime.income / allTime.paidLessons : 0;
     const avgHourlyRate = monthlyHours ? monthlyIncome / monthlyHours : 0;
-    const topStudents = rankStudents(allTime.transactions.length ? allTime.transactions : currentMonth.transactions);
+    const students = rankStudents(allTime.transactions.length ? allTime.transactions : currentMonth.transactions);
+    const priceBenchmark = buildPriceBenchmark(students);
+    const priceRecommendations = buildPriceRecommendations(students);
     const monthlyBreakdown = buildMonthlyBreakdown(allTransactions);
     const avgWeeklyHours = calculateAverageWeeklyHours(allTime.hours, reportRange);
     const avgWeeklyLessons = calculateAverageWeeklyLessons(allTime.lessons, reportRange);
@@ -530,7 +532,9 @@
         lifetimeStudents: visible.lifetimeStudents || allTime.students,
         totalStudents: allTime.students || visible.lifetimeStudents
       },
-      topStudents,
+      topStudents: students.slice(0, 10),
+      priceBenchmark,
+      priceRecommendations,
       monthlyBreakdown
     };
   }
@@ -768,10 +772,22 @@
           paidLessons: 0,
           currentPrice: 0,
           currentPriceDate: null,
+          firstLessonDate: null,
+          lastLessonDate: null,
+          lastPaidDate: null,
+          recentLessons: 0,
           transactions: 0
         });
       }
       const item = ranking.get(student);
+      if (transaction.date) {
+        if (!item.firstLessonDate || transaction.date < item.firstLessonDate) {
+          item.firstLessonDate = transaction.date;
+        }
+        if (!item.lastLessonDate || transaction.date > item.lastLessonDate) {
+          item.lastLessonDate = transaction.date;
+        }
+      }
       item.income += transaction.amount;
       item.lessons += transaction.lessonCount;
       item.hours += transaction.durationHours;
@@ -779,12 +795,18 @@
       item.durationRows += transaction.hasDuration ? 1 : 0;
       item.paidTransactions += transaction.amount > 0 ? 1 : 0;
       item.paidLessons += transaction.amount > 0 ? transaction.lessonCount : 0;
+      if (transaction.amount > 0 && transaction.date && (!item.lastPaidDate || transaction.date > item.lastPaidDate)) {
+        item.lastPaidDate = transaction.date;
+      }
       if (transaction.amount > 0 && transaction.lessonPrice > 0) {
         const transactionDate = transaction.date || new Date(0);
         if (!item.currentPriceDate || transactionDate >= item.currentPriceDate) {
           item.currentPrice = transaction.lessonPrice;
           item.currentPriceDate = transactionDate;
         }
+      }
+      if (transaction.date && transaction.amount > 0 && daysBetween(transaction.date, new Date()) <= 30) {
+        item.recentLessons += transaction.lessonCount || 1;
       }
       item.transactions += 1;
     }
@@ -794,18 +816,135 @@
       .map((item) => {
         const lessons = item.lessonRows ? item.lessons : 0;
         const hours = item.durationRows ? item.hours : 0;
+        const activeMonths = calculateActiveMonths(item.firstLessonDate, item.lastLessonDate);
         return {
           ...item,
           lessons,
           hours,
+          activeMonths,
+          avgLessonsPerMonth: activeMonths ? lessons / activeMonths : lessons,
           currentPrice: item.currentPrice,
           bookingRate: item.paidTransactions ? item.income / item.paidTransactions : 0,
           hourlyRate: hours ? item.income / hours : 0,
           lessonRate: item.paidLessons ? item.income / item.paidLessons : 0
         };
       })
-      .sort((a, b) => b.income - a.income)
-      .slice(0, 10);
+      .sort((a, b) => b.income - a.income);
+  }
+
+  function buildPriceBenchmark(students) {
+    const groups = new Map();
+
+    for (const student of students) {
+      const key = student.currentPrice ? String(Math.round(student.currentPrice)) : "unbekannt";
+      if (!groups.has(key)) {
+        groups.set(key, {
+          price: student.currentPrice || 0,
+          label: student.currentPrice ? money(student.currentPrice) : "unbekannt",
+          students: [],
+          income: 0,
+          lessons: 0,
+          recentLessons: 0
+        });
+      }
+
+      const group = groups.get(key);
+      group.students.push(student);
+      group.income += student.income;
+      group.lessons += student.lessons || student.transactions;
+      group.recentLessons += student.recentLessons;
+    }
+
+    return [...groups.values()]
+      .map((group) => ({
+        ...group,
+        studentCount: group.students.length,
+        avgLessonsPerStudent: group.students.length ? group.lessons / group.students.length : 0
+      }))
+      .sort((a, b) => {
+        if (!a.price) {
+          return 1;
+        }
+        if (!b.price) {
+          return -1;
+        }
+        return a.price - b.price;
+      });
+  }
+
+  function buildPriceRecommendations(students) {
+    const pricedStudents = students.filter((student) => student.currentPrice > 0);
+    const medianPrice = median(pricedStudents.map((student) => student.currentPrice));
+
+    return pricedStudents
+      .map((student) => {
+        const recommendation = getPriceRecommendation(student, medianPrice);
+        return recommendation ? { ...student, ...recommendation } : null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => {
+        const priorityDelta = b.priority - a.priority;
+        return priorityDelta || b.recentLessons - a.recentLessons || b.lessons - a.lessons;
+      })
+      .slice(0, 12);
+  }
+
+  function getPriceRecommendation(student, medianPrice) {
+    const lessons = student.lessons || student.transactions;
+    const lowComparedToMedian = medianPrice && student.currentPrice <= medianPrice * 0.9;
+    const veryActive = student.recentLessons >= 8 || student.avgLessonsPerMonth >= 8;
+    const steady = lessons >= 10 || student.avgLessonsPerMonth >= 4;
+    const inactiveDays = student.lastPaidDate ? daysBetween(student.lastPaidDate, new Date()) : null;
+
+    if (student.currentPrice && veryActive && (lowComparedToMedian || lessons >= 12)) {
+      return {
+        action: "Preiserhöhung besprechen",
+        reason: lowComparedToMedian
+          ? `hohe Auslastung und unter Medianpreis ${money(medianPrice)}`
+          : "hohe Auslastung in den letzten Einheiten",
+        priority: 3
+      };
+    }
+
+    if (student.currentPrice && steady && lowComparedToMedian) {
+      return {
+        action: "Preis prüfen",
+        reason: `stabile Zusammenarbeit unter Medianpreis ${money(medianPrice)}`,
+        priority: 2
+      };
+    }
+
+    if (student.currentPrice && student.currentPrice <= medianPrice * 0.8 && inactiveDays !== null && inactiveDays > 90) {
+      return {
+        action: "Zusammenarbeit prüfen",
+        reason: `${inactiveDays} Tage ohne bezahlte Einheit bei niedrigem Preis`,
+        priority: 1
+      };
+    }
+
+    return null;
+  }
+
+  function median(values) {
+    const sorted = values.filter((value) => value > 0).sort((a, b) => a - b);
+    if (!sorted.length) {
+      return 0;
+    }
+
+    const middle = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+  }
+
+  function calculateActiveMonths(start, end) {
+    if (!start || !end) {
+      return 0;
+    }
+
+    return Math.max(1, ((startOfDay(end) - startOfDay(start)) / DAY_MS + 1) / 30.4375);
+  }
+
+  function daysBetween(start, end) {
+    return Math.max(0, Math.round((startOfDay(end) - startOfDay(start)) / DAY_MS));
   }
 
   function render(state) {
@@ -853,6 +992,14 @@
             ${insight("Aktive Schüler", number(state.metrics.activeStudents), "aktuell")}
           </div>
         </div>
+      </div>
+      <div class="pp-panel pp-wide-panel">
+        <h3>Preis-Benchmarking</h3>
+        ${renderPriceBenchmark(state.priceBenchmark)}
+      </div>
+      <div class="pp-panel pp-wide-panel">
+        <h3>Preis-Hinweise</h3>
+        ${renderPriceRecommendations(state.priceRecommendations)}
       </div>
       ${state.errors.length ? `<details class="pp-debug"><summary>Hinweise zur Datenerfassung</summary><pre>${escapeHtml(JSON.stringify(state.errors, null, 2))}</pre></details>` : ""}
     `;
@@ -1077,6 +1224,86 @@
         </tbody>
       </table>
     `;
+  }
+
+  function renderPriceBenchmark(groups) {
+    if (!groups.length) {
+      return `<p class="pp-empty">Noch keine Preisdaten gefunden. Dafür braucht die CSV die Spalte Lesson Price, USD.</p>`;
+    }
+
+    return `
+      <table class="pp-table">
+        <thead>
+          <tr>
+            <th>Preis</th>
+            <th>Lernende</th>
+            <th>Namen</th>
+            <th>Einheiten</th>
+            <th>Ø Einheiten</th>
+            <th>Einnahmen</th>
+            <th>Letzte 30 Tage</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${groups.map((group) => `
+            <tr>
+              <td>${escapeHtml(group.label)}</td>
+              <td>${number(group.studentCount)}</td>
+              <td>${renderStudentChips(group.students)}</td>
+              <td>${number(group.lessons)}</td>
+              <td>${number(group.avgLessonsPerStudent)}</td>
+              <td>${money(group.income)}</td>
+              <td>${number(group.recentLessons)}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `;
+  }
+
+  function renderPriceRecommendations(recommendations) {
+    if (!recommendations.length) {
+      return `<p class="pp-empty">Keine klaren Preis-Hinweise gefunden. Das ist meist gut: entweder fehlen Lesson-Price-Daten oder die Preise wirken im geladenen Verlauf bereits konsistent.</p>`;
+    }
+
+    return `
+      <table class="pp-table">
+        <thead>
+          <tr>
+            <th>Lernende</th>
+            <th>Hinweis</th>
+            <th>Aktueller Preis</th>
+            <th>Einheiten</th>
+            <th>Ø pro Monat</th>
+            <th>Letzte 30 Tage</th>
+            <th>Grund</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${recommendations.map((student) => `
+            <tr>
+              <td>${escapeHtml(student.student)}</td>
+              <td><span class="pp-badge pp-badge-${student.priority}">${escapeHtml(student.action)}</span></td>
+              <td>${money(student.currentPrice)}</td>
+              <td>${number(student.lessons || student.transactions)}</td>
+              <td>${number(student.avgLessonsPerMonth)}</td>
+              <td>${number(student.recentLessons)}</td>
+              <td>${escapeHtml(student.reason)}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `;
+  }
+
+  function renderStudentChips(students) {
+    const visibleStudents = students.slice(0, 8);
+    const hiddenCount = students.length - visibleStudents.length;
+    const chips = visibleStudents
+      .map((student) => `<span class="pp-chip">${escapeHtml(student.student)}</span>`)
+      .join("");
+
+    return `<div class="pp-chip-list">${chips}${hiddenCount > 0 ? `<span class="pp-chip">+${hiddenCount}</span>` : ""}</div>`;
   }
 
   function insight(label, value, detail = "") {

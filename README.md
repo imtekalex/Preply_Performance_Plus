@@ -1,6 +1,6 @@
 # Preply Performance Plus
 
-Chrome extension that augments `https://preply.com/de/performance` with income analytics, monthly projection, cached lifetime totals, and student benchmarking.
+Chrome extension that augments `https://preply.com/de/performance` with income analytics, monthly projection, cached lifetime totals, student benchmarking, and price benchmarking.
 
 ## Install locally
 
@@ -39,6 +39,10 @@ The panel always shows an update timestamp in German, for example:
 - Average weekly hours when the CSV includes an actual duration column
 - Average units pro month
 - Top 10 student ranking by income, units, current price, and hourly rate when the CSV includes the required columns
+- Price benchmarking by current student price, including which students are billed at each price point
+- Price recommendation hints based on current price, total units, recent 30-day units, average units pro month, and the median student price
+
+Price recommendation hints are intentionally conservative. They infer possible price conversations from CSV history only; they do not know your real availability, message demand, student context, or relationship quality.
 
 ## Next data check
 

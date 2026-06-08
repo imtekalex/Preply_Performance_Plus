@@ -214,6 +214,10 @@
   white-space: nowrap;
 }
 
+.pp-table td:last-child {
+  white-space: normal;
+}
+
 .pp-month-table th,
 .pp-month-table td {
   text-align: right;
@@ -228,6 +232,52 @@
   border-top: 2px solid #cbd5e1;
   background: #eef4fb;
   font-weight: 700;
+}
+
+.pp-chip-list {
+  display: flex;
+  max-width: 440px;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.pp-chip,
+.pp-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.pp-chip {
+  padding: 4px 8px;
+  background: #e8f2ff;
+  color: #0f4f8f;
+}
+
+.pp-badge {
+  padding: 5px 9px;
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.pp-badge-3 {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.pp-badge-2 {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.pp-badge-1 {
+  background: #fee2e2;
+  color: #991b1b;
 }
 
 .pp-insights {
