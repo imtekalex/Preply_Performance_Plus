@@ -20,6 +20,8 @@ That keeps the request authenticated with the existing Preply session and avoids
 
 The parser explicitly supports Preply CSV columns such as `Schüler`, `Datum der Einheit`, `Type`, `Earning, USD`, and `Lesson Price, USD`. It intentionally uses `Earning, USD` for tutor income and `Lesson Price, USD` for the current student price in the ranking.
 
+The extension also queries Preply's `TutorStudentManagement` GraphQL operation from the performance page session. That provides the current-student list, status, next lesson, and balance utilisation. When this request is available, active-student ranking and price benchmarking use Preply's current-student list instead of the CSV-only recent-lessons fallback.
+
 The panel always shows an update timestamp in German, for example:
 
 `Echtzeit-Kennzahlen aktualisiert: 7. Juni, 11:43 Uhr.`
@@ -38,11 +40,11 @@ The panel always shows an update timestamp in German, for example:
 - Active students and total students
 - Average weekly hours when the CSV includes an actual duration column
 - Average units pro month
-- Top 10 active-student ranking by income, units, current price, tutor wage, and hourly rate when the CSV includes the required columns
-- Price benchmarking for currently active students by current student price, including tutor wage and which students are billed at each price point
-- Price recommendation hints based on current price, total units, recent 30-day units, average units pro month, and the median student price
+- Top 10 active-student ranking by income, units, open hours, current price, tutor wage, and hourly rate when the CSV includes the required columns
+- Price benchmarking for currently active students by current student price, including tutor wage, open hours, and which students are billed at each price point
+- Price recommendation hints based on current price, total units, open hours, recent 30-day units, average units pro month, and the median student price
 
-Price recommendation hints are intentionally conservative. They infer possible price conversations from CSV history only; they do not know your real availability, message demand, student context, Preply's current-student filter, outstanding lessons, or relationship quality.
+Price recommendation hints are intentionally conservative. They infer possible price conversations from CSV history plus Preply's current-student balance data when available; they do not know your real availability, message demand, student context, or relationship quality.
 
 ## Next data check
 

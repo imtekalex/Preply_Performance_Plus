@@ -6,6 +6,48 @@
   const CACHE_KEY = "preplyPlusTransactionCache";
   const CACHE_VERSION = 2;
   const DEFAULT_HISTORY_START = "2000-01-01";
+  const STUDENT_PAGE_SIZE = 50;
+  const STUDENT_MANAGEMENT_QUERY = `query TutorStudentManagement($offset: Int!, $count: Int!, $archivedByTutor: Boolean, $orderField: TutoringSortFieldsEnum!, $orderDirection: CommonSortDirectionsEnum!, $includeOngoing: Boolean!, $clientName: String, $statuses: [TutoringStatusEnum!], $smartFilter: TutoringSmartFilter) {
+  currentUser {
+    id
+    tutor {
+      id
+      studentManagementTutorings(offset: $offset, count: $count, archivedByTutor: $archivedByTutor, statuses: $statuses, smartFilter: $smartFilter, orderBy: {field: $orderField, direction: $orderDirection}, clientName: $clientName) {
+        totalCount
+        nodes {
+          id
+          clientName
+          hasHoursToScheduleLesson
+          client {
+            id
+            user {
+              id
+              firstName
+              fullName
+              __typename
+            }
+            __typename
+          }
+          status
+          balanceUtilisation {
+            totalHours
+            utilisedHours
+            __typename
+          }
+          nextLesson(includeOngoing: $includeOngoing) {
+            id
+            datetime
+            __typename
+          }
+          __typename
+        }
+        __typename
+      }
+      __typename
+    }
+    __typename
+  }
+}`;
 
   let lastState = null;
   let pendingRequest = null;
@@ -126,7 +168,8 @@
       }
 
       reportResult = await mergeReportResultWithCache(cache, reportResult);
-      lastState = buildState(visible, reportResult);
+      const studentResult = await requestActiveStudents();
+      lastState = buildState(visible, reportResult, studentResult);
       render(lastState);
       if (!force) {
         hasAutoLoaded = true;
@@ -267,6 +310,95 @@
     }
 
     return { reports, errors };
+  }
+
+  async function requestActiveStudents() {
+    const nodes = [];
+    const errors = [];
+    let totalCount = null;
+
+    for (let offset = 0; offset < 1000; offset += STUDENT_PAGE_SIZE) {
+      try {
+        const page = await requestActiveStudentsPage(offset, STUDENT_PAGE_SIZE);
+        totalCount = page.totalCount;
+        nodes.push(...page.nodes);
+
+        if (nodes.length >= totalCount || page.nodes.length === 0) {
+          break;
+        }
+      } catch (error) {
+        errors.push({
+          id: "TutorStudentManagement",
+          message: error instanceof Error ? error.message : String(error)
+        });
+        break;
+      }
+    }
+
+    return {
+      source: nodes.length ? "studentManagement" : "fallback",
+      totalCount: totalCount ?? nodes.length,
+      students: nodes.map(normalizeManagedStudent),
+      errors
+    };
+  }
+
+  async function requestActiveStudentsPage(offset, count) {
+    const response = await fetch(new URL("/graphql", window.location.origin).toString(), {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        operationName: "TutorStudentManagement",
+        variables: {
+          offset,
+          count,
+          includeOngoing: true,
+          orderField: "next_lesson_date",
+          orderDirection: "asc",
+          archivedByTutor: false
+        },
+        query: STUDENT_MANAGEMENT_QUERY
+      })
+    });
+    const text = await response.text();
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${text.slice(0, 160)}`);
+    }
+
+    const payload = JSON.parse(text);
+    if (payload.errors?.length) {
+      throw new Error(payload.errors.map((error) => error.message).join("; "));
+    }
+
+    const tutorings = payload.data?.currentUser?.tutor?.studentManagementTutorings;
+    return {
+      totalCount: tutorings?.totalCount || 0,
+      nodes: tutorings?.nodes || []
+    };
+  }
+
+  function normalizeManagedStudent(node) {
+    const totalHours = Number(node.balanceUtilisation?.totalHours || 0);
+    const utilisedHours = Number(node.balanceUtilisation?.utilisedHours || 0);
+    const outstandingHours = Math.max(0, totalHours - utilisedHours);
+    const fullName = cleanStudentName(node.clientName || node.client?.user?.fullName || node.client?.user?.firstName || "");
+
+    return {
+      id: node.id,
+      name: fullName,
+      key: normalizeStudentKey(fullName),
+      status: node.status || "",
+      hasHoursToScheduleLesson: Boolean(node.hasHoursToScheduleLesson),
+      outstandingHours,
+      totalHours,
+      utilisedHours,
+      nextLessonDate: parseDate(node.nextLesson?.datetime || "")
+    };
   }
 
   function buildRanges(cache, { fetchLatest = false } = {}) {
@@ -460,7 +592,7 @@
     return root.querySelector("h1, h2, h3, [data-preply-ds-component='Heading']")?.textContent?.trim() || root.textContent?.trim() || "";
   }
 
-  function buildState(visible, reportResult) {
+  function buildState(visible, reportResult, studentResult = { students: [], errors: [] }) {
     const reports = Object.fromEntries(
       (reportResult.parsedReports || []).map((report) => [report.id, report])
     );
@@ -488,14 +620,15 @@
     const totalIncome = allTime.income || visible.totalEarnings || yearToDate.income || visible.chartEarnings || visible.overviewEarnings;
     const monthlyIncome = currentMonth.income || visible.chartEarnings || visible.overviewEarnings;
     const monthlyLessons = currentMonth.lessons || (source === "visible" ? visible.overviewLessons : 0);
-    const activeStudents = visible.activeStudents || currentMonth.students || allTime.students;
+    const managedStudentMap = buildManagedStudentMap(studentResult.students || []);
+    const activeStudents = studentResult.totalCount || visible.activeStudents || currentMonth.students || allTime.students;
     const projectedIncome = projectMonth(monthlyIncome);
     const monthlyHours = currentMonth.hours;
     const avgPayoutCurrentMonth = currentMonth.paidLessons ? currentMonth.income / currentMonth.paidLessons : 0;
     const avgPayoutAllTime = allTime.paidLessons ? allTime.income / allTime.paidLessons : 0;
     const avgHourlyRate = monthlyHours ? monthlyIncome / monthlyHours : 0;
     const students = rankStudents(allTime.transactions.length ? allTime.transactions : currentMonth.transactions);
-    const activeStudentsForBenchmark = students.filter((student) => student.recentLessons > 0);
+    const activeStudentsForBenchmark = filterActiveStudents(students, managedStudentMap);
     const priceBenchmark = buildPriceBenchmark(activeStudentsForBenchmark);
     const priceRecommendations = buildPriceRecommendations(activeStudentsForBenchmark);
     const monthlyBreakdown = buildMonthlyBreakdown(allTransactions);
@@ -506,7 +639,8 @@
     return {
       visible,
       reports,
-      errors: reportResult.errors || [],
+      errors: [...(reportResult.errors || []), ...(studentResult.errors || [])],
+      studentSource: studentResult.source || "fallback",
       source,
       reportRange,
       updatedAt: new Date(),
@@ -533,6 +667,7 @@
         totalStudents: allTime.students || visible.lifetimeStudents
       },
       topStudents: activeStudentsForBenchmark.slice(0, 10),
+      managedStudents: studentResult.students || [],
       priceBenchmark,
       priceRecommendations,
       monthlyBreakdown
@@ -852,6 +987,7 @@
           income: 0,
           lessons: 0,
           paidLessons: 0,
+          outstandingHours: 0,
           recentLessons: 0
         });
       }
@@ -861,6 +997,7 @@
       group.income += student.income;
       group.lessons += student.lessons || student.transactions;
       group.paidLessons += student.paidLessons || 0;
+      group.outstandingHours += student.outstandingHours || 0;
       group.recentLessons += student.recentLessons;
     }
 
@@ -881,6 +1018,48 @@
         }
         return b.price - a.price;
       });
+  }
+
+  function buildManagedStudentMap(students) {
+    const map = new Map();
+
+    for (const student of students) {
+      if (student.key) {
+        map.set(student.key, student);
+      }
+    }
+
+    return map;
+  }
+
+  function filterActiveStudents(students, managedStudentMap) {
+    if (!managedStudentMap.size) {
+      return students.filter((student) => student.recentLessons > 0);
+    }
+
+    return students
+      .map((student) => {
+        const managedStudent = managedStudentMap.get(normalizeStudentKey(student.student));
+        return managedStudent
+          ? {
+              ...student,
+              managedStatus: managedStudent.status,
+              hasHoursToScheduleLesson: managedStudent.hasHoursToScheduleLesson,
+              outstandingHours: managedStudent.outstandingHours,
+              nextLessonDate: managedStudent.nextLessonDate
+            }
+          : null;
+      })
+      .filter(Boolean);
+  }
+
+  function normalizeStudentKey(value) {
+    return cleanStudentName(value)
+      .toLocaleLowerCase("de-DE")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^\p{L}\p{N}]+/gu, " ")
+      .trim();
   }
 
   function buildPriceRecommendations(students) {
@@ -904,15 +1083,16 @@
     const lessons = student.lessons || student.transactions;
     const lowComparedToMedian = medianPrice && student.currentPrice <= medianPrice * 0.9;
     const veryActive = student.recentLessons >= 8 || student.avgLessonsPerMonth >= 8;
+    const highOutstandingBalance = student.outstandingHours >= 4;
     const steady = lessons >= 10 || student.avgLessonsPerMonth >= 4;
     const inactiveDays = student.lastPaidDate ? daysBetween(student.lastPaidDate, new Date()) : null;
 
-    if (student.currentPrice && veryActive && (lowComparedToMedian || lessons >= 12)) {
+    if (student.currentPrice && (veryActive || highOutstandingBalance) && (lowComparedToMedian || lessons >= 12)) {
       return {
         action: "Preiserhöhung besprechen",
         reason: lowComparedToMedian
-          ? `hohe Auslastung und unter Medianpreis ${money(medianPrice)}`
-          : "hohe Auslastung in den letzten Einheiten",
+          ? `hohe Auslastung/Reststunden und unter Medianpreis ${money(medianPrice)}`
+          : "hohe Auslastung oder viele offene Stunden",
         priority: 3
       };
     }
@@ -1220,6 +1400,7 @@
             <th>Lernende</th>
             <th>Einnahmen</th>
             <th>Einheiten</th>
+            <th>Offen</th>
             ${hasHours ? "<th>Stunden</th><th>Ø pro Stunde</th>" : ""}
             <th title="Lesson Price">Preis</th>
             <th title="Earning, USD pro bezahlter Einheit">Lohn</th>
@@ -1232,6 +1413,7 @@
               <td>${escapeHtml(student.student)}</td>
               <td>${money(student.income)}</td>
               <td>${number(student.lessons || student.transactions)}</td>
+              <td>${student.outstandingHours ? `${number(student.outstandingHours)} h` : "0"}</td>
               ${hasHours ? `<td>${number(student.hours)}</td><td>${rateOrNA(student.hourlyRate)}</td>` : ""}
               <td>${rateOrNA(student.currentPrice)}</td>
               <td>${rateOrNA(student.lessonRate)}</td>
@@ -1257,6 +1439,7 @@
             <th>Namen</th>
             <th>Einheiten</th>
             <th>Ø Einheiten</th>
+            <th>Offen</th>
             <th>Einnahmen</th>
             <th>Letzte 30 Tage</th>
           </tr>
@@ -1270,6 +1453,7 @@
               <td>${renderStudentChips(group.students)}</td>
               <td>${number(group.lessons)}</td>
               <td>${number(group.avgLessonsPerStudent)}</td>
+              <td>${number(group.outstandingHours)} h</td>
               <td>${money(group.income)}</td>
               <td>${number(group.recentLessons)}</td>
             </tr>
@@ -1294,6 +1478,7 @@
             <th title="Earning, USD pro bezahlter Einheit">Lohn</th>
             <th>Einheiten</th>
             <th>Ø pro Monat</th>
+            <th>Offen</th>
             <th>Letzte 30 Tage</th>
             <th>Grund</th>
           </tr>
@@ -1307,6 +1492,7 @@
               <td>${rateOrNA(student.lessonRate)}</td>
               <td>${number(student.lessons || student.transactions)}</td>
               <td>${number(student.avgLessonsPerMonth)}</td>
+              <td>${student.outstandingHours ? `${number(student.outstandingHours)} h` : "0"}</td>
               <td>${number(student.recentLessons)}</td>
               <td>${escapeHtml(student.reason)}</td>
             </tr>
