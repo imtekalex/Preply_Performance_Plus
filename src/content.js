@@ -158,9 +158,6 @@
           <p id="pp-updated">Echtzeit-Kennzahlen werden geladen ...</p>
         </div>
         <div class="pp-actions">
-          <button id="pp-clear-cache" type="button" title="Gespeicherte CSV-Daten löschen und vollständig neu laden" aria-label="Gespeicherte CSV-Daten löschen und vollständig neu laden">
-            <span aria-hidden="true">🗑</span>
-          </button>
           <button id="pp-refresh" type="button" title="Kennzahlen aktualisieren" aria-label="Kennzahlen aktualisieren">
             <span aria-hidden="true">↻</span>
           </button>
@@ -178,20 +175,22 @@
         statusMessage: "Aktualisiere Kennzahlen: hole aktuelle CSV-Daten und behalte gespeicherte Historie ..."
       });
     });
-    root.querySelector("#pp-clear-cache").addEventListener("click", async () => {
-      const confirmed = window.confirm(
-        "Gespeicherte CSV-Daten löschen? Danach lädt Preply Performance Plus den kompletten Einnahmenbericht seit Beginn neu."
-      );
-      if (!confirmed) {
-        return;
-      }
-      await clearTransactionCache();
-      hasAutoLoaded = false;
-      selectedMonthYear = null;
-      scheduleRefresh(0, {
-        force: true,
-        statusMessage: "Gespeicherte CSV-Daten gelöscht. Lade den kompletten Einnahmenbericht seit Beginn neu ..."
-      });
+  }
+
+  async function confirmAndClearCache() {
+    const confirmed = window.confirm(
+      "Gespeicherte CSV-Daten löschen? Danach lädt Preply Performance Plus den kompletten Einnahmenbericht seit Beginn neu."
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    await clearTransactionCache();
+    hasAutoLoaded = false;
+    selectedMonthYear = null;
+    scheduleRefresh(0, {
+      force: true,
+      statusMessage: "Gespeicherte CSV-Daten gelöscht. Lade den kompletten Einnahmenbericht seit Beginn neu ..."
     });
   }
 
@@ -720,6 +719,8 @@
           durationRows: 0,
           paidTransactions: 0,
           paidLessons: 0,
+          priceWeightedSum: 0,
+          priceLessonCount: 0,
           students: new Set(),
           transactions: 0
         });
@@ -733,6 +734,10 @@
       month.durationRows += transaction.hasDuration ? 1 : 0;
       month.paidTransactions += transaction.amount > 0 ? 1 : 0;
       month.paidLessons += transaction.amount > 0 ? transaction.lessonCount : 0;
+      if (transaction.amount > 0 && transaction.lessonPrice > 0) {
+        month.priceWeightedSum += transaction.lessonPrice * (transaction.lessonCount || 1);
+        month.priceLessonCount += transaction.lessonCount || 1;
+      }
       month.transactions += 1;
       if (transaction.student) {
         month.students.add(transaction.student);
@@ -748,6 +753,7 @@
           lessons,
           hours,
           activeStudents: month.students.size,
+          avgLessonPrice: month.priceLessonCount ? month.priceWeightedSum / month.priceLessonCount : 0,
           bookingRate: month.paidTransactions ? month.income / month.paidTransactions : 0,
           hourlyRate: hours ? month.income / hours : 0,
           lessonRate: month.paidLessons ? month.income / month.paidLessons : 0
@@ -962,15 +968,14 @@
     }
 
     updated.textContent = `Echtzeit-Kennzahlen aktualisiert: ${dateFormatter.format(state.updatedAt)}, ${timeFormatter.format(state.updatedAt)} Uhr.`;
-    status.textContent = state.source === "report"
-      ? `Datenquelle: CSV-Einnahmenbericht ${formatISODate(state.reportRange.start)} - ${formatISODate(state.reportRange.end)}.`
+    status.innerHTML = state.source === "report"
+      ? `Datenquelle: CSV-Einnahmenbericht ${formatISODate(state.reportRange.start)} - ${formatISODate(state.reportRange.end)}. <button id="pp-clear-cache-link" class="pp-clear-link" type="button">Löschen</button>`
       : "Datenquelle: sichtbare Preply-Kennzahlen. Der CSV-Bericht konnte noch nicht gelesen werden.";
 
     content.innerHTML = `
       <div class="pp-grid">
         ${metricCard("Einnahmen gesamt", money(state.metrics.totalIncome), "seit Beginn")}
-        ${metricCard("Ø Auszahlung", money(state.metrics.avgPayoutCurrentMonth), "pro bezahlter Einheit im aktuellen Monat")}
-        ${metricCard("Ø Auszahlung", money(state.metrics.avgPayoutAllTime), "pro bezahlter Einheit seit Beginn")}
+        ${metricCard("Ø Auszahlung", `${money(state.metrics.avgPayoutCurrentMonth)} · ${money(state.metrics.avgPayoutAllTime)}`, "aktueller Monat · seit Beginn")}
         ${metricCard("Prognose Monat", money(state.metrics.projectedIncome), "hochgerechnet bis Monatsende")}
         ${metricCard("Monatseinnahmen", money(state.metrics.monthlyIncome), deltaText(state.metrics.monthDelta))}
       </div>
@@ -989,12 +994,12 @@
         <div class="pp-panel">
           <h3>Weitere Kennzahlen</h3>
           <div class="pp-insights">
+            ${insight("Ø Einheiten pro Monat", number(state.metrics.avgMonthlyLessons), "seit Beginn")}
             ${state.metrics.avgWeeklyHours
               ? insight("Ø Wochenstunden", `${number(state.metrics.avgWeeklyHours)} h`, "seit Beginn")
               : insight("Ø Einheiten pro Woche", number(state.metrics.avgWeeklyLessons), "seit Beginn")}
-            ${insight("Ø Einheiten pro Monat", number(state.metrics.avgMonthlyLessons), "seit Beginn")}
-            ${insight("Aktive Lernende", number(state.metrics.activeStudents), "aktuell")}
             ${insight("Lernende insgesamt", number(state.metrics.totalStudents), "seit Beginn")}
+            ${insight("Aktive Lernende", number(state.metrics.activeStudents), "aktuell")}
           </div>
         </div>
       </div>
@@ -1009,6 +1014,7 @@
       ${state.errors.length ? `<details class="pp-debug"><summary>Hinweise zur Datenerfassung</summary><pre>${escapeHtml(JSON.stringify(state.errors, null, 2))}</pre></details>` : ""}
     `;
     bindMonthPager();
+    document.getElementById("pp-clear-cache-link")?.addEventListener("click", confirmAndClearCache);
   }
 
   function renderMonthPager(months) {
@@ -1081,8 +1087,8 @@
             <th>Einnahmen</th>
             <th>Einheiten</th>
             ${hasHours ? "<th>Stunden</th><th>Ø pro Stunde</th>" : ""}
-            <th>Anteil</th>
-            <th>Ø Auszahlung</th>
+            <th>Ø Preis</th>
+            <th>Ø Lohn</th>
           </tr>
         </thead>
         <tbody>
@@ -1092,7 +1098,7 @@
               <td>${money(month.income)}</td>
               <td>${number(month.lessons || month.transactions)}</td>
               ${hasHours ? `<td>${number(month.hours)}</td><td>${rateOrNA(month.hourlyRate)}</td>` : ""}
-              <td>${formatPercent(summary.income ? month.income / summary.income : 0)}</td>
+              <td>${rateOrNA(month.avgLessonPrice)}</td>
               <td>${rateOrNA(month.lessonRate || month.bookingRate)}</td>
             </tr>
           `).join("")}
@@ -1101,7 +1107,7 @@
             <td>${money(summary.avgIncome)}</td>
             <td>${number(summary.avgLessons)}</td>
             ${hasHours ? `<td>${number(summary.avgHours)}</td><td>${rateOrNA(summary.avgHourlyRate)}</td>` : ""}
-            <td>${summary.monthCount ? formatPercent(1 / summary.monthCount) : "0%"}</td>
+            <td>${rateOrNA(summary.avgLessonPrice)}</td>
             <td>${rateOrNA(summary.avgPayout)}</td>
           </tr>
         </tbody>
@@ -1116,6 +1122,8 @@
     const lessons = months.reduce((total, month) => total + (month.lessons || month.transactions), 0);
     const paidLessons = months.reduce((total, month) => total + month.paidLessons, 0);
     const paidTransactions = months.reduce((total, month) => total + month.paidTransactions, 0);
+    const priceWeightedSum = months.reduce((total, month) => total + month.priceWeightedSum, 0);
+    const priceLessonCount = months.reduce((total, month) => total + month.priceLessonCount, 0);
     const hours = months.reduce((total, month) => total + month.hours, 0);
 
     return {
@@ -1125,6 +1133,7 @@
       avgTransactions: monthCount ? transactions / monthCount : 0,
       avgLessons: monthCount ? lessons / monthCount : 0,
       avgHours: monthCount ? hours / monthCount : 0,
+      avgLessonPrice: priceLessonCount ? priceWeightedSum / priceLessonCount : 0,
       avgHourlyRate: hours ? income / hours : 0,
       avgPayout: paidLessons ? income / paidLessons : paidTransactions ? income / paidTransactions : 0
     };
@@ -1212,7 +1221,8 @@
             <th>Einnahmen</th>
             <th>Einheiten</th>
             ${hasHours ? "<th>Stunden</th><th>Ø pro Stunde</th>" : ""}
-            <th title="Lesson Price (Earning)">Preis (Ausz.)</th>
+            <th title="Lesson Price">Preis</th>
+            <th title="Earning, USD pro bezahlter Einheit">Lohn</th>
           </tr>
         </thead>
         <tbody>
@@ -1223,7 +1233,8 @@
               <td>${money(student.income)}</td>
               <td>${number(student.lessons || student.transactions)}</td>
               ${hasHours ? `<td>${number(student.hours)}</td><td>${rateOrNA(student.hourlyRate)}</td>` : ""}
-              <td>${formatPriceEarning(student)}</td>
+              <td>${rateOrNA(student.currentPrice)}</td>
+              <td>${rateOrNA(student.lessonRate)}</td>
             </tr>
           `).join("")}
         </tbody>
@@ -1240,7 +1251,8 @@
       <table class="pp-table">
         <thead>
           <tr>
-            <th title="Lesson Price (Earning)">Preis (Ausz.)</th>
+            <th title="Lesson Price">Preis</th>
+            <th title="Earning, USD pro bezahlter Einheit">Ø Lohn</th>
             <th>Lernende</th>
             <th>Namen</th>
             <th>Einheiten</th>
@@ -1252,7 +1264,8 @@
         <tbody>
           ${groups.map((group) => `
             <tr>
-              <td>${escapeHtml(`${group.label} (${rateOrNA(group.avgEarning)})`)}</td>
+              <td>${escapeHtml(group.label)}</td>
+              <td>${rateOrNA(group.avgEarning)}</td>
               <td>${number(group.studentCount)}</td>
               <td>${renderStudentChips(group.students)}</td>
               <td>${number(group.lessons)}</td>
@@ -1277,7 +1290,8 @@
           <tr>
             <th>Lernende</th>
             <th>Hinweis</th>
-            <th title="Lesson Price (Earning)">Preis (Ausz.)</th>
+            <th title="Lesson Price">Preis</th>
+            <th title="Earning, USD pro bezahlter Einheit">Lohn</th>
             <th>Einheiten</th>
             <th>Ø pro Monat</th>
             <th>Letzte 30 Tage</th>
@@ -1289,7 +1303,8 @@
             <tr>
               <td>${escapeHtml(student.student)}</td>
               <td><span class="pp-badge pp-badge-${student.priority}">${escapeHtml(student.action)}</span></td>
-              <td>${formatPriceEarning(student)}</td>
+              <td>${money(student.currentPrice)}</td>
+              <td>${rateOrNA(student.lessonRate)}</td>
               <td>${number(student.lessons || student.transactions)}</td>
               <td>${number(student.avgLessonsPerMonth)}</td>
               <td>${number(student.recentLessons)}</td>
@@ -1324,12 +1339,6 @@
         ` : ""}
       </div>
     `;
-  }
-
-  function formatPriceEarning(student) {
-    const price = student.currentPrice ? money(student.currentPrice) : "n/a";
-    const earning = student.lessonRate ? money(student.lessonRate) : "n/a";
-    return `${price} (${earning})`;
   }
 
   function insight(label, value, detail = "") {
