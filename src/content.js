@@ -389,12 +389,18 @@
     const totalHours = Number(node.balanceUtilisation?.totalHours || 0);
     const utilisedHours = Number(node.balanceUtilisation?.utilisedHours || 0);
     const outstandingHours = Math.max(0, totalHours - utilisedHours);
-    const fullName = cleanStudentName(node.clientName || node.client?.user?.fullName || node.client?.user?.firstName || "");
+    const names = [
+      node.clientName,
+      node.client?.user?.fullName,
+      node.client?.user?.firstName
+    ].map((name) => cleanStudentName(name || "")).filter(Boolean);
+    const fullName = names[0] || "";
 
     return {
       id: node.id,
       name: fullName,
       key: normalizeStudentKey(fullName),
+      keys: [...new Set(names.map(normalizeStudentKey).filter(Boolean))],
       status: node.status || "",
       hasHoursToScheduleLesson: Boolean(node.hasHoursToScheduleLesson),
       outstandingHours,
@@ -1029,6 +1035,8 @@
           lessons: 0,
           paidLessons: 0,
           outstandingHours: 0,
+          totalHours: 0,
+          utilisedHours: 0,
           recentLessons: 0
         });
       }
@@ -1039,6 +1047,8 @@
       group.lessons += student.lessons || student.transactions;
       group.paidLessons += student.paidLessons || 0;
       group.outstandingHours += student.outstandingHours || 0;
+      group.totalHours += student.totalHours || 0;
+      group.utilisedHours += student.utilisedHours || 0;
       group.recentLessons += student.recentLessons;
     }
 
@@ -1065,8 +1075,10 @@
     const map = new Map();
 
     for (const student of students) {
-      if (student.key) {
-        map.set(student.key, student);
+      for (const key of student.keys?.length ? student.keys : [student.key]) {
+        if (key) {
+          map.set(key, student);
+        }
       }
     }
 
@@ -1087,6 +1099,8 @@
               managedStatus: managedStudent.status,
               hasHoursToScheduleLesson: managedStudent.hasHoursToScheduleLesson,
               outstandingHours: managedStudent.outstandingHours,
+              totalHours: managedStudent.totalHours,
+              utilisedHours: managedStudent.utilisedHours,
               nextLessonDate: managedStudent.nextLessonDate
             }
           : null;
@@ -1441,7 +1455,7 @@
             <th>Lernende</th>
             <th>Einnahmen</th>
             <th>Einheiten</th>
-            <th>Offen</th>
+            <th>Genutzt / Gesamt</th>
             ${hasHours ? "<th>Stunden</th><th>Ø pro Stunde</th>" : ""}
             <th title="Lesson Price">Preis</th>
             <th title="Earning, USD pro bezahlter Einheit">Lohn</th>
@@ -1454,7 +1468,7 @@
               <td>${escapeHtml(student.student)}</td>
               <td>${money(student.income)}</td>
               <td>${number(student.lessons || student.transactions)}</td>
-              <td>${student.outstandingHours ? `${number(student.outstandingHours)} h` : "0"}</td>
+              <td>${formatBalance(student)}</td>
               ${hasHours ? `<td>${number(student.hours)}</td><td>${rateOrNA(student.hourlyRate)}</td>` : ""}
               <td>${rateOrNA(student.currentPrice)}</td>
               <td>${rateOrNA(student.lessonRate)}</td>
@@ -1480,7 +1494,7 @@
             <th>Namen</th>
             <th>Einheiten</th>
             <th>Ø Einheiten</th>
-            <th>Offen</th>
+            <th>Genutzt / Gesamt</th>
             <th>Einnahmen</th>
             <th>Letzte 30 Tage</th>
           </tr>
@@ -1494,7 +1508,7 @@
               <td>${renderStudentChips(group.students)}</td>
               <td>${number(group.lessons)}</td>
               <td>${number(group.avgLessonsPerStudent)}</td>
-              <td>${number(group.outstandingHours)} h</td>
+              <td>${formatBalance(group)}</td>
               <td>${money(group.income)}</td>
               <td>${number(group.recentLessons)}</td>
             </tr>
@@ -1519,7 +1533,7 @@
             <th title="Earning, USD pro bezahlter Einheit">Lohn</th>
             <th>Einheiten</th>
             <th>Ø pro Monat</th>
-            <th>Offen</th>
+            <th>Genutzt / Gesamt</th>
             <th>Letzte 30 Tage</th>
             <th>Grund</th>
           </tr>
@@ -1533,7 +1547,7 @@
               <td>${rateOrNA(student.lessonRate)}</td>
               <td>${number(student.lessons || student.transactions)}</td>
               <td>${number(student.avgLessonsPerMonth)}</td>
-              <td>${student.outstandingHours ? `${number(student.outstandingHours)} h` : "0"}</td>
+              <td>${formatBalance(student)}</td>
               <td>${number(student.recentLessons)}</td>
               <td>${escapeHtml(student.reason)}</td>
             </tr>
@@ -1566,6 +1580,14 @@
         ` : ""}
       </div>
     `;
+  }
+
+  function formatBalance(item) {
+    if (!item || (!item.totalHours && !item.utilisedHours)) {
+      return "n/a";
+    }
+
+    return `${number(item.utilisedHours)} / ${number(item.totalHours)}`;
   }
 
   function insight(label, value, detail = "") {
