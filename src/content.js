@@ -154,7 +154,7 @@
     root.innerHTML = `
       <div class="pp-header">
         <div>
-          <h2>Business-Kennzahlen</h2>
+          <h2>Geschäftskennzahlen</h2>
           <p id="pp-updated">Echtzeit-Kennzahlen werden geladen ...</p>
         </div>
         <div class="pp-actions">
@@ -496,8 +496,9 @@
     const avgPayoutAllTime = allTime.paidLessons ? allTime.income / allTime.paidLessons : 0;
     const avgHourlyRate = monthlyHours ? monthlyIncome / monthlyHours : 0;
     const students = rankStudents(allTime.transactions.length ? allTime.transactions : currentMonth.transactions);
-    const priceBenchmark = buildPriceBenchmark(students);
-    const priceRecommendations = buildPriceRecommendations(students);
+    const activeStudentsForBenchmark = students.filter((student) => student.recentLessons > 0);
+    const priceBenchmark = buildPriceBenchmark(activeStudentsForBenchmark);
+    const priceRecommendations = buildPriceRecommendations(activeStudentsForBenchmark);
     const monthlyBreakdown = buildMonthlyBreakdown(allTransactions);
     const avgWeeklyHours = calculateAverageWeeklyHours(allTime.hours, reportRange);
     const avgWeeklyLessons = calculateAverageWeeklyLessons(allTime.lessons, reportRange);
@@ -532,7 +533,7 @@
         lifetimeStudents: visible.lifetimeStudents || allTime.students,
         totalStudents: allTime.students || visible.lifetimeStudents
       },
-      topStudents: students.slice(0, 10),
+      topStudents: activeStudentsForBenchmark.slice(0, 10),
       priceBenchmark,
       priceRecommendations,
       monthlyBreakdown
@@ -844,6 +845,7 @@
           students: [],
           income: 0,
           lessons: 0,
+          paidLessons: 0,
           recentLessons: 0
         });
       }
@@ -852,12 +854,15 @@
       group.students.push(student);
       group.income += student.income;
       group.lessons += student.lessons || student.transactions;
+      group.paidLessons += student.paidLessons || 0;
       group.recentLessons += student.recentLessons;
     }
 
     return [...groups.values()]
       .map((group) => ({
         ...group,
+        students: group.students.sort((a, b) => a.student.localeCompare(b.student, "de")),
+        avgEarning: group.paidLessons ? group.income / group.paidLessons : 0,
         studentCount: group.students.length,
         avgLessonsPerStudent: group.students.length ? group.lessons / group.students.length : 0
       }))
@@ -868,7 +873,7 @@
         if (!b.price) {
           return -1;
         }
-        return a.price - b.price;
+        return b.price - a.price;
       });
   }
 
@@ -978,7 +983,7 @@
       </div>
       <div class="pp-split">
         <div class="pp-panel">
-          <h3>Student Benchmarking</h3>
+          <h3>Lernenden-Ranking</h3>
           ${renderStudentTable(state.topStudents)}
         </div>
         <div class="pp-panel">
@@ -988,17 +993,17 @@
               ? insight("Ø Wochenstunden", `${number(state.metrics.avgWeeklyHours)} h`, "seit Beginn")
               : insight("Ø Einheiten pro Woche", number(state.metrics.avgWeeklyLessons), "seit Beginn")}
             ${insight("Ø Einheiten pro Monat", number(state.metrics.avgMonthlyLessons), "seit Beginn")}
-            ${insight("Schüler insgesamt", number(state.metrics.totalStudents), "seit Beginn")}
-            ${insight("Aktive Schüler", number(state.metrics.activeStudents), "aktuell")}
+            ${insight("Aktive Lernende", number(state.metrics.activeStudents), "aktuell")}
+            ${insight("Lernende insgesamt", number(state.metrics.totalStudents), "seit Beginn")}
           </div>
         </div>
       </div>
       <div class="pp-panel pp-wide-panel">
-        <h3>Preis-Benchmarking</h3>
+        <h3>Preisvergleich aktiver Lernender</h3>
         ${renderPriceBenchmark(state.priceBenchmark)}
       </div>
       <div class="pp-panel pp-wide-panel">
-        <h3>Preis-Hinweise</h3>
+        <h3>Preis-Empfehlungen</h3>
         ${renderPriceRecommendations(state.priceRecommendations)}
       </div>
       ${state.errors.length ? `<details class="pp-debug"><summary>Hinweise zur Datenerfassung</summary><pre>${escapeHtml(JSON.stringify(state.errors, null, 2))}</pre></details>` : ""}
@@ -1193,7 +1198,7 @@
 
   function renderStudentTable(students) {
     if (!students.length) {
-      return `<p class="pp-empty">Noch keine Studentendaten gefunden. Öffne einmal den Einnahmenbericht als CSV oder prüfe im Debug-Hinweis, ob Preply die Spaltennamen geändert hat.</p>`;
+      return `<p class="pp-empty">Noch keine Lernenden-Daten gefunden. Öffne einmal den Einnahmenbericht als CSV oder prüfe im Debug-Hinweis, ob Preply die Spaltennamen geändert hat.</p>`;
     }
 
     const hasHours = students.some((student) => student.hours > 0);
@@ -1207,7 +1212,7 @@
             <th>Einnahmen</th>
             <th>Einheiten</th>
             ${hasHours ? "<th>Stunden</th><th>Ø pro Stunde</th>" : ""}
-            <th>Aktueller Preis</th>
+            <th title="Lesson Price (Earning)">Preis (Ausz.)</th>
           </tr>
         </thead>
         <tbody>
@@ -1218,7 +1223,7 @@
               <td>${money(student.income)}</td>
               <td>${number(student.lessons || student.transactions)}</td>
               ${hasHours ? `<td>${number(student.hours)}</td><td>${rateOrNA(student.hourlyRate)}</td>` : ""}
-              <td>${rateOrNA(student.currentPrice)}</td>
+              <td>${formatPriceEarning(student)}</td>
             </tr>
           `).join("")}
         </tbody>
@@ -1235,7 +1240,7 @@
       <table class="pp-table">
         <thead>
           <tr>
-            <th>Preis</th>
+            <th title="Lesson Price (Earning)">Preis (Ausz.)</th>
             <th>Lernende</th>
             <th>Namen</th>
             <th>Einheiten</th>
@@ -1247,7 +1252,7 @@
         <tbody>
           ${groups.map((group) => `
             <tr>
-              <td>${escapeHtml(group.label)}</td>
+              <td>${escapeHtml(`${group.label} (${rateOrNA(group.avgEarning)})`)}</td>
               <td>${number(group.studentCount)}</td>
               <td>${renderStudentChips(group.students)}</td>
               <td>${number(group.lessons)}</td>
@@ -1272,7 +1277,7 @@
           <tr>
             <th>Lernende</th>
             <th>Hinweis</th>
-            <th>Aktueller Preis</th>
+            <th title="Lesson Price (Earning)">Preis (Ausz.)</th>
             <th>Einheiten</th>
             <th>Ø pro Monat</th>
             <th>Letzte 30 Tage</th>
@@ -1284,7 +1289,7 @@
             <tr>
               <td>${escapeHtml(student.student)}</td>
               <td><span class="pp-badge pp-badge-${student.priority}">${escapeHtml(student.action)}</span></td>
-              <td>${money(student.currentPrice)}</td>
+              <td>${formatPriceEarning(student)}</td>
               <td>${number(student.lessons || student.transactions)}</td>
               <td>${number(student.avgLessonsPerMonth)}</td>
               <td>${number(student.recentLessons)}</td>
@@ -1297,13 +1302,34 @@
   }
 
   function renderStudentChips(students) {
-    const visibleStudents = students.slice(0, 8);
+    const sortedStudents = [...students].sort((a, b) => a.student.localeCompare(b.student, "de"));
+    const visibleStudents = sortedStudents.slice(0, 8);
     const hiddenCount = students.length - visibleStudents.length;
     const chips = visibleStudents
       .map((student) => `<span class="pp-chip">${escapeHtml(student.student)}</span>`)
       .join("");
+    const hiddenChips = sortedStudents
+      .slice(8)
+      .map((student) => `<span class="pp-chip">${escapeHtml(student.student)}</span>`)
+      .join("");
 
-    return `<div class="pp-chip-list">${chips}${hiddenCount > 0 ? `<span class="pp-chip">+${hiddenCount}</span>` : ""}</div>`;
+    return `
+      <div class="pp-chip-list">
+        ${chips}
+        ${hiddenCount > 0 ? `
+          <details class="pp-chip-details">
+            <summary class="pp-chip">+${hiddenCount}</summary>
+            <div class="pp-chip-list pp-chip-list-extra">${hiddenChips}</div>
+          </details>
+        ` : ""}
+      </div>
+    `;
+  }
+
+  function formatPriceEarning(student) {
+    const price = student.currentPrice ? money(student.currentPrice) : "n/a";
+    const earning = student.lessonRate ? money(student.lessonRate) : "n/a";
+    return `${price} (${earning})`;
   }
 
   function insight(label, value, detail = "") {

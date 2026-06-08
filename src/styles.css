@@ -241,6 +241,28 @@
   gap: 4px;
 }
 
+.pp-chip-details {
+  display: contents;
+}
+
+.pp-chip-details summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.pp-chip-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.pp-chip-details[open] summary {
+  display: none;
+}
+
+.pp-chip-list-extra {
+  display: contents;
+  max-width: none;
+}
+
 .pp-chip,
 .pp-badge {
   display: inline-flex;
