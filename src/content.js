@@ -360,7 +360,9 @@
       credentials: "include",
       headers: {
         Accept: "application/json",
-        "Content-Type": "application/json"
+        "Apollo-Require-Preflight": "true",
+        "Content-Type": "application/json",
+        "X-Apollo-Operation-Name": "TutorStudentManagement"
       },
       body: JSON.stringify({
         operationName: "TutorStudentManagement",
