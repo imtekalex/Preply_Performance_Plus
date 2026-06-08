@@ -16,9 +16,9 @@ The extension first tries to fetch Preply's own earnings report endpoint in the 
 
 `/tutor/download-earnings-report?timestampStart=YYYY-MM-DD&timestampEnd=YYYY-MM-DD&format=csv`
 
-That keeps the request authenticated with the existing Preply session and avoids opening the report dialog. To avoid unnecessary traffic, the extension stores parsed CSV transactions in `chrome.storage.local`. The first successful run requests the full available history; later runs only request the missing date range. If the cache already reaches today, no CSV request is made on page load. Use the clear-cache button in the panel header to delete the stored CSV data and rebuild the history from scratch.
+That keeps the request authenticated with the existing Preply session and avoids opening the report dialog. To avoid unnecessary traffic, the extension stores parsed CSV transactions in `chrome.storage.local`. The first successful run requests the full available history; later page loads only request the missing date range. If the cache already reaches today, no CSV request is made on page load. The refresh button only fetches the current day and merges it into the existing cache. The trash button asks for confirmation, deletes the stored CSV data, and rebuilds the history from scratch.
 
-The parser explicitly supports Preply CSV columns such as `Schüler`, `Datum der Einheit`, `Type`, and `Earning, USD`. It intentionally uses `Earning, USD` for tutor income.
+The parser explicitly supports Preply CSV columns such as `Schüler`, `Datum der Einheit`, `Type`, `Earning, USD`, and `Lesson Price, USD`. It intentionally uses `Earning, USD` for tutor income and `Lesson Price, USD` for the current student price in the ranking.
 
 The panel always shows an update timestamp in German, for example:
 
@@ -27,18 +27,18 @@ The panel always shows an update timestamp in German, for example:
 ## Current metrics
 
 - Total income since the first cached CSV transaction
-- Average payout per paid lesson for the current month
-- Average payout per paid lesson since the first cached CSV transaction
+- Average payout pro paid lesson for the current month
+- Average payout pro paid lesson since the first cached CSV transaction
 - Current month income
 - Monthly income breakdown by year
 - Year navigation for monthly income tables when multiple years are available
 - Projected month income
-- Average hourly rate when the CSV includes an actual duration/hour column
-- Average lessons per week when hour columns are unavailable
+- Average hourly rate when the CSV includes an actual duration column
+- Average lessons pro week when hour columns are unavailable
 - Active students and total students
-- Average weekly hours when the CSV includes an actual duration/hour column
-- Average units per month
-- Top 10 student ranking by income, units, average payout per unit, and hourly rate when the CSV includes the required columns
+- Average weekly hours when the CSV includes an actual duration column
+- Average units pro month
+- Top 10 student ranking by income, units, current price, and hourly rate when the CSV includes the required columns
 
 ## Next data check
 

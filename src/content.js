@@ -4,6 +4,7 @@
   const MESSAGE_RESPONSE = "PREPLY_PLUS_REPORTS_RESULT";
   const DAY_MS = 24 * 60 * 60 * 1000;
   const CACHE_KEY = "preplyPlusTransactionCache";
+  const CACHE_VERSION = 2;
   const DEFAULT_HISTORY_START = "2000-01-01";
 
   let lastState = null;
@@ -92,7 +93,7 @@
     refreshTimer = window.setTimeout(() => refreshAnalytics(options), delay);
   }
 
-  async function refreshAnalytics({ force = false } = {}) {
+  async function refreshAnalytics({ force = false, fetchLatest = false, statusMessage = "Aktualisiere Kennzahlen ..." } = {}) {
     if (isRefreshing) {
       return;
     }
@@ -108,12 +109,12 @@
 
     isRefreshing = true;
     renderShell(anchor);
-    setStatus("Aktualisiere Kennzahlen ...");
+    setStatus(statusMessage);
 
     try {
       const visible = scrapeVisibleMetrics();
       const cache = await loadTransactionCache();
-      activeReportRanges = buildRanges(cache);
+      activeReportRanges = buildRanges(cache, { fetchLatest });
       let reportResult = { reports: [], errors: [] };
 
       if (activeReportRanges.length) {
@@ -157,8 +158,8 @@
           <p id="pp-updated">Echtzeit-Kennzahlen werden geladen ...</p>
         </div>
         <div class="pp-actions">
-          <button id="pp-clear-cache" type="button" title="Gespeicherte CSV-Daten löschen" aria-label="Gespeicherte CSV-Daten löschen">
-            <span aria-hidden="true">⌫</span>
+          <button id="pp-clear-cache" type="button" title="Gespeicherte CSV-Daten löschen und vollständig neu laden" aria-label="Gespeicherte CSV-Daten löschen und vollständig neu laden">
+            <span aria-hidden="true">🗑</span>
           </button>
           <button id="pp-refresh" type="button" title="Kennzahlen aktualisieren" aria-label="Kennzahlen aktualisieren">
             <span aria-hidden="true">↻</span>
@@ -170,13 +171,27 @@
     `;
 
     anchor.insertAdjacentElement("afterend", root);
-    root.querySelector("#pp-refresh").addEventListener("click", () => scheduleRefresh(0, { force: true }));
+    root.querySelector("#pp-refresh").addEventListener("click", () => {
+      scheduleRefresh(0, {
+        force: true,
+        fetchLatest: true,
+        statusMessage: "Aktualisiere Kennzahlen: hole aktuelle CSV-Daten und behalte gespeicherte Historie ..."
+      });
+    });
     root.querySelector("#pp-clear-cache").addEventListener("click", async () => {
+      const confirmed = window.confirm(
+        "Gespeicherte CSV-Daten löschen? Danach lädt Preply Performance Plus den kompletten Einnahmenbericht seit Beginn neu."
+      );
+      if (!confirmed) {
+        return;
+      }
       await clearTransactionCache();
       hasAutoLoaded = false;
       selectedMonthYear = null;
-      setStatus("Gespeicherte CSV-Daten gelöscht. Lade Kennzahlen neu ...");
-      scheduleRefresh(0, { force: true });
+      scheduleRefresh(0, {
+        force: true,
+        statusMessage: "Gespeicherte CSV-Daten gelöscht. Lade den kompletten Einnahmenbericht seit Beginn neu ..."
+      });
     });
   }
 
@@ -255,17 +270,17 @@
     return { reports, errors };
   }
 
-  function buildRanges(cache) {
+  function buildRanges(cache, { fetchLatest = false } = {}) {
     const { today } = getDateBoundaries();
     const todayISO = toISODate(today);
     const cachedEnd = cache?.end || "";
 
-    if (cachedEnd && cachedEnd >= todayISO) {
+    if (cachedEnd && cachedEnd >= todayISO && !fetchLatest) {
       return [];
     }
 
     return [
-      { id: "sinceBeginning", start: cachedEnd || DEFAULT_HISTORY_START, end: todayISO }
+      { id: "sinceBeginning", start: fetchLatest && cachedEnd ? todayISO : cachedEnd || DEFAULT_HISTORY_START, end: todayISO }
     ];
   }
 
@@ -285,7 +300,7 @@
     return new Promise((resolve) => {
       chrome.storage.local.get(CACHE_KEY, (result) => {
         const cache = result?.[CACHE_KEY];
-        if (!cache || !Array.isArray(cache.transactions)) {
+        if (!cache || cache.version !== CACHE_VERSION || !Array.isArray(cache.transactions)) {
           resolve({ transactions: [], start: null, end: null, updatedAt: null });
           return;
         }
@@ -304,6 +319,7 @@
     return new Promise((resolve) => {
       chrome.storage.local.set({
         [CACHE_KEY]: {
+          version: CACHE_VERSION,
           start: cache.start,
           end: cache.end,
           updatedAt: cache.updatedAt,
@@ -352,6 +368,7 @@
       type: transaction.type,
       lessonCount: transaction.lessonCount,
       durationHours: transaction.durationHours,
+      lessonPrice: transaction.lessonPrice,
       hasLessonCount: transaction.hasLessonCount,
       hasDuration: transaction.hasDuration,
       fingerprint: transaction.fingerprint
@@ -602,8 +619,10 @@
     const typeEntry = findEntryByHeader(entries, /^(type|typ)$/i);
     const lessonEntry = findEntryByHeader(entries, /(lesson count|lessons|units|classes|einheiten|stunden|anzahl)/i);
     const durationEntry = findEntryByHeader(entries, /(duration|hour|hours|minutes|mins|dauer|minuten|stunden)/i);
+    const lessonPriceEntry = findEntryByHeader(entries, /(lesson price|price per lesson|price.*lesson|lesson.*price)/i);
     const lessonCount = parseLessonCount(lessonEntry?.[1] || "", Boolean(dateEntry || typeEntry));
     const durationHours = parseDurationHours(durationEntry?.[1] || "", lessonCount);
+    const lessonPrice = parseLessonPrice(lessonPriceEntry?.[1] || "");
     const fingerprint = Object.values(row).join("|");
 
     return {
@@ -613,6 +632,7 @@
       type: typeEntry?.[1] || "",
       lessonCount,
       durationHours,
+      lessonPrice,
       hasLessonCount: lessonCount > 0,
       hasDuration: durationHours > 0,
       fingerprint,
@@ -746,6 +766,8 @@
           durationRows: 0,
           paidTransactions: 0,
           paidLessons: 0,
+          currentPrice: 0,
+          currentPriceDate: null,
           transactions: 0
         });
       }
@@ -757,6 +779,13 @@
       item.durationRows += transaction.hasDuration ? 1 : 0;
       item.paidTransactions += transaction.amount > 0 ? 1 : 0;
       item.paidLessons += transaction.amount > 0 ? transaction.lessonCount : 0;
+      if (transaction.amount > 0 && transaction.lessonPrice > 0) {
+        const transactionDate = transaction.date || new Date(0);
+        if (!item.currentPriceDate || transactionDate >= item.currentPriceDate) {
+          item.currentPrice = transaction.lessonPrice;
+          item.currentPriceDate = transactionDate;
+        }
+      }
       item.transactions += 1;
     }
 
@@ -769,6 +798,7 @@
           ...item,
           lessons,
           hours,
+          currentPrice: item.currentPrice,
           bookingRate: item.paidTransactions ? item.income / item.paidTransactions : 0,
           hourlyRate: hours ? item.income / hours : 0,
           lessonRate: item.paidLessons ? item.income / item.paidLessons : 0
@@ -817,10 +847,10 @@
           <div class="pp-insights">
             ${state.metrics.avgWeeklyHours
               ? insight("Ø Wochenstunden", `${number(state.metrics.avgWeeklyHours)} h`, "seit Beginn")
-              : insight("Ø Einheiten/Woche", number(state.metrics.avgWeeklyLessons), "seit Beginn")}
+              : insight("Ø Einheiten pro Woche", number(state.metrics.avgWeeklyLessons), "seit Beginn")}
+            ${insight("Ø Einheiten pro Monat", number(state.metrics.avgMonthlyLessons), "seit Beginn")}
             ${insight("Schüler insgesamt", number(state.metrics.totalStudents), "seit Beginn")}
             ${insight("Aktive Schüler", number(state.metrics.activeStudents), "aktuell")}
-            ${insight("Ø Einheiten pro Monat", number(state.metrics.avgMonthlyLessons), "seit Beginn")}
           </div>
         </div>
       </div>
@@ -898,7 +928,7 @@
             <th>Monat</th>
             <th>Einnahmen</th>
             <th>Einheiten</th>
-            ${hasHours ? "<th>Stunden</th><th>Ø Stunde</th>" : ""}
+            ${hasHours ? "<th>Stunden</th><th>Ø pro Stunde</th>" : ""}
             <th>Anteil</th>
             <th>Ø Auszahlung</th>
           </tr>
@@ -1029,8 +1059,8 @@
             <th>Lernende</th>
             <th>Einnahmen</th>
             <th>Einheiten</th>
-            ${hasHours ? "<th>Stunden</th><th>Ø Stunde</th>" : ""}
-            <th>Ø Auszahlung</th>
+            ${hasHours ? "<th>Stunden</th><th>Ø pro Stunde</th>" : ""}
+            <th>Aktueller Preis</th>
           </tr>
         </thead>
         <tbody>
@@ -1041,7 +1071,7 @@
               <td>${money(student.income)}</td>
               <td>${number(student.lessons || student.transactions)}</td>
               ${hasHours ? `<td>${number(student.hours)}</td><td>${rateOrNA(student.hourlyRate)}</td>` : ""}
-              <td>${rateOrNA(student.lessonRate || student.bookingRate)}</td>
+              <td>${rateOrNA(student.currentPrice)}</td>
             </tr>
           `).join("")}
         </tbody>
@@ -1147,6 +1177,23 @@
     }
 
     return number > 10 ? number / 60 : number;
+  }
+
+  function parseLessonPrice(value) {
+    if (!value) {
+      return 0;
+    }
+
+    const amount = parseNumber(value);
+    if (!amount) {
+      return 0;
+    }
+
+    if (amount >= 1000 && amount % 100 === 0) {
+      return amount / 100;
+    }
+
+    return amount;
   }
 
   function parseDate(value) {
