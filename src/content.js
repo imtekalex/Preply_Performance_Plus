@@ -3,6 +3,8 @@
   const MESSAGE_REQUEST = "PREPLY_PLUS_FETCH_REPORTS";
   const MESSAGE_RESPONSE = "PREPLY_PLUS_REPORTS_RESULT";
   const DAY_MS = 24 * 60 * 60 * 1000;
+  const CACHE_KEY = "preplyPlusTransactionCache";
+  const DEFAULT_HISTORY_START = "2000-01-01";
 
   let lastState = null;
   let pendingRequest = null;
@@ -10,6 +12,7 @@
   let hasAutoLoaded = false;
   let isRefreshing = false;
   let selectedMonthYear = null;
+  let activeReportRanges = [];
 
   const moneyFormatter = new Intl.NumberFormat("de-DE", {
     style: "currency",
@@ -109,14 +112,19 @@
 
     try {
       const visible = scrapeVisibleMetrics();
-      let reportResult = null;
+      const cache = await loadTransactionCache();
+      activeReportRanges = buildRanges(cache);
+      let reportResult = { reports: [], errors: [] };
 
-      try {
-        reportResult = await requestReports();
-      } catch (error) {
-        reportResult = await requestReportsDirect(error);
+      if (activeReportRanges.length) {
+        try {
+          reportResult = await requestReports();
+        } catch (error) {
+          reportResult = await requestReportsDirect(error);
+        }
       }
 
+      reportResult = await mergeReportResultWithCache(cache, reportResult);
       lastState = buildState(visible, reportResult);
       render(lastState);
       if (!force) {
@@ -148,9 +156,14 @@
           <h2>Business-Kennzahlen</h2>
           <p id="pp-updated">Echtzeit-Kennzahlen werden geladen ...</p>
         </div>
-        <button id="pp-refresh" type="button" title="Kennzahlen aktualisieren" aria-label="Kennzahlen aktualisieren">
-          <span aria-hidden="true">↻</span>
-        </button>
+        <div class="pp-actions">
+          <button id="pp-clear-cache" type="button" title="Gespeicherte CSV-Daten löschen" aria-label="Gespeicherte CSV-Daten löschen">
+            <span aria-hidden="true">⌫</span>
+          </button>
+          <button id="pp-refresh" type="button" title="Kennzahlen aktualisieren" aria-label="Kennzahlen aktualisieren">
+            <span aria-hidden="true">↻</span>
+          </button>
+        </div>
       </div>
       <div id="pp-status" class="pp-status"></div>
       <div id="pp-content" class="pp-content" aria-live="polite"></div>
@@ -158,6 +171,13 @@
 
     anchor.insertAdjacentElement("afterend", root);
     root.querySelector("#pp-refresh").addEventListener("click", () => scheduleRefresh(0, { force: true }));
+    root.querySelector("#pp-clear-cache").addEventListener("click", async () => {
+      await clearTransactionCache();
+      hasAutoLoaded = false;
+      selectedMonthYear = null;
+      setStatus("Gespeicherte CSV-Daten gelöscht. Lade Kennzahlen neu ...");
+      scheduleRefresh(0, { force: true });
+    });
   }
 
   function setStatus(text) {
@@ -169,7 +189,7 @@
 
   function requestReports() {
     const requestId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    const ranges = buildRanges();
+    const ranges = activeReportRanges;
 
     return new Promise((resolve, reject) => {
       const timeout = window.setTimeout(() => {
@@ -200,7 +220,7 @@
       }
     ];
 
-    for (const range of buildRanges()) {
+    for (const range of activeReportRanges) {
       try {
         const url = new URL("/tutor/download-earnings-report", window.location.origin);
         url.searchParams.set("timestampStart", range.start);
@@ -235,11 +255,17 @@
     return { reports, errors };
   }
 
-  function buildRanges() {
-    const { today, trailingStart } = getDateBoundaries();
+  function buildRanges(cache) {
+    const { today } = getDateBoundaries();
+    const todayISO = toISODate(today);
+    const cachedEnd = cache?.end || "";
+
+    if (cachedEnd && cachedEnd >= todayISO) {
+      return [];
+    }
 
     return [
-      { id: "trailingYear", start: toISODate(trailingStart), end: toISODate(today) }
+      { id: "sinceBeginning", start: cachedEnd || DEFAULT_HISTORY_START, end: todayISO }
     ];
   }
 
@@ -253,6 +279,142 @@
       yearStart: new Date(today.getFullYear(), 0, 1),
       trailingStart: new Date(today.getTime() - 365 * DAY_MS)
     };
+  }
+
+  function loadTransactionCache() {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(CACHE_KEY, (result) => {
+        const cache = result?.[CACHE_KEY];
+        if (!cache || !Array.isArray(cache.transactions)) {
+          resolve({ transactions: [], start: null, end: null, updatedAt: null });
+          return;
+        }
+
+        resolve({
+          start: cache.start || null,
+          end: cache.end || null,
+          updatedAt: cache.updatedAt || null,
+          transactions: cache.transactions.map(deserializeTransaction).filter(Boolean)
+        });
+      });
+    });
+  }
+
+  function saveTransactionCache(cache) {
+    return new Promise((resolve) => {
+      chrome.storage.local.set({
+        [CACHE_KEY]: {
+          start: cache.start,
+          end: cache.end,
+          updatedAt: cache.updatedAt,
+          transactions: cache.transactions.map(serializeTransaction)
+        }
+      }, resolve);
+    });
+  }
+
+  function clearTransactionCache() {
+    return new Promise((resolve) => chrome.storage.local.remove(CACHE_KEY, resolve));
+  }
+
+  async function mergeReportResultWithCache(cache, reportResult) {
+    const reports = (reportResult.reports || []).map(parseReport);
+    const freshTransactions = reports.flatMap((report) => report.transactions);
+    const mergedTransactions = dedupeTransactions([...(cache.transactions || []), ...freshTransactions]);
+    const rangeStart = minISODate([cache.start, earliestTransactionDate(mergedTransactions)])
+      || reports[0]?.start
+      || DEFAULT_HISTORY_START;
+    const rangeEnd = maxISODate([cache.end, ...reports.map((report) => report.end), latestTransactionDate(mergedTransactions)]);
+    const mergedCache = {
+      start: rangeStart,
+      end: rangeEnd,
+      updatedAt: new Date().toISOString(),
+      transactions: mergedTransactions
+    };
+
+    if (freshTransactions.length || activeReportRanges.length) {
+      await saveTransactionCache(mergedCache);
+    }
+
+    return {
+      ...reportResult,
+      parsedReports: reports,
+      cachedTransactions: mergedTransactions,
+      cacheRange: { start: mergedCache.start, end: mergedCache.end }
+    };
+  }
+
+  function serializeTransaction(transaction) {
+    return {
+      amount: transaction.amount,
+      student: transaction.student,
+      date: transaction.date ? transaction.date.toISOString() : null,
+      type: transaction.type,
+      lessonCount: transaction.lessonCount,
+      durationHours: transaction.durationHours,
+      hasLessonCount: transaction.hasLessonCount,
+      hasDuration: transaction.hasDuration,
+      fingerprint: transaction.fingerprint
+    };
+  }
+
+  function deserializeTransaction(transaction) {
+    if (!transaction || typeof transaction !== "object") {
+      return null;
+    }
+
+    return {
+      ...transaction,
+      date: transaction.date ? new Date(transaction.date) : null
+    };
+  }
+
+  function dedupeTransactions(transactions) {
+    const seen = new Set();
+    const unique = [];
+
+    for (const transaction of transactions) {
+      const key = transactionKey(transaction);
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      unique.push(transaction);
+    }
+
+    return unique.sort((a, b) => {
+      const dateA = a.date ? a.date.getTime() : 0;
+      const dateB = b.date ? b.date.getTime() : 0;
+      return dateA - dateB;
+    });
+  }
+
+  function transactionKey(transaction) {
+    const rawValues = transaction.fingerprint || (transaction.raw ? Object.values(transaction.raw).join("|") : "");
+    return [
+      transaction.date ? transaction.date.toISOString() : "",
+      transaction.student || "",
+      transaction.type || "",
+      transaction.amount || 0,
+      transaction.lessonCount || 0,
+      rawValues
+    ].join("::");
+  }
+
+  function earliestTransactionDate(transactions) {
+    return minISODate(transactions.map((transaction) => transaction.date && toISODate(transaction.date)));
+  }
+
+  function latestTransactionDate(transactions) {
+    return maxISODate(transactions.map((transaction) => transaction.date && toISODate(transaction.date)));
+  }
+
+  function minISODate(values) {
+    return values.filter(Boolean).sort()[0] || null;
+  }
+
+  function maxISODate(values) {
+    return values.filter(Boolean).sort().at(-1) || null;
   }
 
   function scrapeVisibleMetrics() {
@@ -284,46 +446,43 @@
 
   function buildState(visible, reportResult) {
     const reports = Object.fromEntries(
-      (reportResult.reports || []).map((report) => [report.id, parseReport(report)])
+      (reportResult.parsedReports || []).map((report) => [report.id, report])
     );
 
-    const trailingYear = summarizeTransactions(reports.trailingYear?.transactions || []);
-    const reportRange = reports.trailingYear
-      ? { start: reports.trailingYear.start, end: reports.trailingYear.end }
-      : buildRanges()[0];
+    const allTransactions = reportResult.cachedTransactions || reports.sinceBeginning?.transactions || [];
+    const allTime = summarizeTransactions(allTransactions);
+    const reportRange = reportResult.cacheRange || reports.sinceBeginning || activeReportRanges[0] || null;
     const boundaries = getDateBoundaries();
-    const trailingTransactions = reports.trailingYear?.transactions || [];
     const currentMonth = summarizeTransactions(filterTransactionsByDate(
-      trailingTransactions,
+      allTransactions,
       boundaries.currentMonthStart,
       boundaries.today
     ));
     const previousMonth = summarizeTransactions(filterTransactionsByDate(
-      trailingTransactions,
+      allTransactions,
       boundaries.previousMonthStart,
       boundaries.previousMonthEnd
     ));
     const yearToDate = summarizeTransactions(filterTransactionsByDate(
-      trailingTransactions,
+      allTransactions,
       boundaries.yearStart,
       boundaries.today
     ));
-    const source = trailingYear.transactions.length ? "report" : "visible";
-    const totalIncome = visible.totalEarnings || trailingYear.income || yearToDate.income || visible.chartEarnings || visible.overviewEarnings;
+    const source = allTime.transactions.length ? "report" : "visible";
+    const totalIncome = allTime.income || visible.totalEarnings || yearToDate.income || visible.chartEarnings || visible.overviewEarnings;
     const monthlyIncome = currentMonth.income || visible.chartEarnings || visible.overviewEarnings;
     const monthlyLessons = currentMonth.lessons || (source === "visible" ? visible.overviewLessons : 0);
-    const activeStudents = visible.activeStudents || currentMonth.students || trailingYear.students;
+    const activeStudents = visible.activeStudents || currentMonth.students || allTime.students;
     const projectedIncome = projectMonth(monthlyIncome);
     const monthlyHours = currentMonth.hours;
-    const avgPerLesson = monthlyLessons ? monthlyIncome / monthlyLessons : 0;
+    const avgPayoutCurrentMonth = currentMonth.paidLessons ? currentMonth.income / currentMonth.paidLessons : 0;
+    const avgPayoutAllTime = allTime.paidLessons ? allTime.income / allTime.paidLessons : 0;
     const avgHourlyRate = monthlyHours ? monthlyIncome / monthlyHours : 0;
-    const topStudents = rankStudents(trailingYear.transactions.length ? trailingYear.transactions : currentMonth.transactions);
-    const monthlyBreakdown = buildMonthlyBreakdown(trailingTransactions);
-    const studentAnalysis = analyzeStudents(trailingTransactions);
-    const pricePointStats = buildPricePointStats(studentAnalysis.students);
-    const avgWeeklyHours = calculateAverageWeeklyHours(trailingYear.hours, reportRange);
-    const avgWeeklyLessons = calculateAverageWeeklyLessons(trailingYear.lessons, reportRange);
-    const avgMonthlyBookings = calculateAverageMonthlyBookings(monthlyBreakdown);
+    const topStudents = rankStudents(allTime.transactions.length ? allTime.transactions : currentMonth.transactions);
+    const monthlyBreakdown = buildMonthlyBreakdown(allTransactions);
+    const avgWeeklyHours = calculateAverageWeeklyHours(allTime.hours, reportRange);
+    const avgWeeklyLessons = calculateAverageWeeklyLessons(allTime.lessons, reportRange);
+    const avgMonthlyLessons = calculateAverageMonthlyLessons(monthlyBreakdown);
 
     return {
       visible,
@@ -339,22 +498,22 @@
         projectedIncome,
         totalIncome,
         yearToDateIncome: yearToDate.income,
-        avgPerLesson,
+        avgPayoutCurrentMonth,
+        avgPayoutAllTime,
         avgHourlyRate,
         monthlyHours,
         avgWeeklyHours,
         avgWeeklyLessons,
-        avgMonthlyBookings,
+        avgMonthlyLessons,
         monthlyLessons,
         activeStudents,
         newStudents: visible.newStudents,
         lifetimeHours: visible.lifetimeHours,
         lifetimeLessons: visible.lifetimeLessons,
-        lifetimeStudents: visible.lifetimeStudents
+        lifetimeStudents: visible.lifetimeStudents || allTime.students,
+        totalStudents: allTime.students || visible.lifetimeStudents
       },
       topStudents,
-      studentAnalysis,
-      pricePointStats,
       monthlyBreakdown
     };
   }
@@ -443,62 +602,22 @@
     const typeEntry = findEntryByHeader(entries, /^(type|typ)$/i);
     const lessonEntry = findEntryByHeader(entries, /(lesson count|lessons|units|classes|einheiten|stunden|anzahl)/i);
     const durationEntry = findEntryByHeader(entries, /(duration|hour|hours|minutes|mins|dauer|minuten|stunden)/i);
-    const lessonPriceEntry = findEntryByHeader(entries, /(lesson price|price per lesson|price.*lesson|lesson.*price)/i);
-    const confirmationDateEntry = findEntryByHeader(entries, /(confirmation date|bestätigung|bestätigungsdatum|confirmed at|confirmed on)/i);
     const lessonCount = parseLessonCount(lessonEntry?.[1] || "", Boolean(dateEntry || typeEntry));
     const durationHours = parseDurationHours(durationEntry?.[1] || "", lessonCount);
-    const lessonPrice = parseLessonPrice(lessonPriceEntry?.[1] || "");
-    const kind = normalizeTransactionKind(typeEntry?.[1] || "", lessonPrice, amountEntry?.[1] || "");
+    const fingerprint = Object.values(row).join("|");
 
     return {
       amount: parseMoney(amountEntry?.[1] || ""),
       student: cleanStudentName(studentEntry?.[1] || ""),
       date: parseDate(dateEntry?.[1] || ""),
       type: typeEntry?.[1] || "",
-      kind,
       lessonCount,
       durationHours,
-      lessonPrice,
-      confirmationDate: parseDate(confirmationDateEntry?.[1] || ""),
       hasLessonCount: lessonCount > 0,
       hasDuration: durationHours > 0,
+      fingerprint,
       raw: row
     };
-  }
-
-  function normalizeTransactionKind(type, lessonPrice, amountValue) {
-    const text = String(type || "").trim().toLowerCase();
-    if (/unused lesson/i.test(type) || /unused/i.test(text)) {
-      return "unused";
-    }
-    if (/trial/i.test(type) || /probefahrt|probe.*lesson|probe/i.test(text)) {
-      return "trial";
-    }
-    if (/non[- ]trial|lesson/i.test(text) || (lessonPrice > 0 && /lesson/i.test(type))) {
-      return "paid";
-    }
-    const amount = parseMoney(amountValue);
-    if (amount > 0) {
-      return "paid";
-    }
-    return "other";
-  }
-
-  function parseLessonPrice(value) {
-    if (!value) {
-      return 0;
-    }
-
-    const amount = parseNumber(value);
-    if (!amount) {
-      return 0;
-    }
-
-    if (amount >= 1000 && amount % 100 === 0) {
-      return amount / 100;
-    }
-
-    return amount;
   }
 
   function findEntryByHeader(entries, pattern) {
@@ -516,6 +635,8 @@
     let hours = 0;
     let lessonRows = 0;
     let durationRows = 0;
+    let paidLessons = 0;
+    let paidTransactions = 0;
 
     for (const transaction of transactions) {
       income += transaction.amount;
@@ -523,6 +644,8 @@
       hours += transaction.durationHours;
       lessonRows += transaction.hasLessonCount ? 1 : 0;
       durationRows += transaction.hasDuration ? 1 : 0;
+      paidTransactions += transaction.amount > 0 ? 1 : 0;
+      paidLessons += transaction.amount > 0 ? transaction.lessonCount : 0;
       if (transaction.student) {
         students.add(transaction.student);
       }
@@ -533,178 +656,11 @@
       lessons: lessonRows ? lessons : 0,
       hours: durationRows ? hours : 0,
       transactionCount: transactions.length,
+      paidTransactions,
+      paidLessons: lessonRows ? paidLessons : paidTransactions,
       students: students.size,
       transactions
     };
-  }
-
-  function analyzeStudents(transactions) {
-    const students = new Map();
-    const today = startOfDay(new Date());
-
-    for (const transaction of transactions) {
-      const name = transaction.student || "Unbekannt";
-      if (!students.has(name)) {
-        students.set(name, {
-          student: name,
-          income: 0,
-          paidLessons: 0,
-          trialLessons: 0,
-          unusedLessons: 0,
-          pipelineValue: 0,
-          paidTransactions: 0,
-          trialTransactions: 0,
-          unusedTransactions: 0,
-          transactionCount: 0,
-          firstLessonDate: null,
-          firstPaidDate: null,
-          lastPaidDate: null,
-          lastLessonDate: null,
-          latestPaidPrice: 0,
-          latestPaidPriceDate: null,
-          lessonPriceObservations: []
-        });
-      }
-
-      const student = students.get(name);
-      student.transactionCount += 1;
-
-      if (transaction.date) {
-        if (!student.firstLessonDate || transaction.date < student.firstLessonDate) {
-          student.firstLessonDate = transaction.date;
-        }
-        if (!student.lastLessonDate || transaction.date > student.lastLessonDate) {
-          student.lastLessonDate = transaction.date;
-        }
-      }
-
-      if (transaction.kind === "trial") {
-        student.trialTransactions += 1;
-        student.trialLessons += transaction.lessonCount;
-      }
-
-      if (transaction.kind === "paid") {
-        student.paidTransactions += 1;
-        student.paidLessons += transaction.lessonCount;
-        student.income += transaction.amount;
-
-        if (!student.firstPaidDate || (transaction.date && transaction.date < student.firstPaidDate)) {
-          student.firstPaidDate = transaction.date;
-        }
-        if (!student.lastPaidDate || (transaction.date && transaction.date > student.lastPaidDate)) {
-          student.lastPaidDate = transaction.date;
-        }
-
-        const price = transaction.lessonPrice || (transaction.lessonCount ? transaction.amount / transaction.lessonCount : 0);
-        if (price > 0) {
-          student.lessonPriceObservations.push({ price, date: transaction.date });
-          if (!student.latestPaidPriceDate || (transaction.date && transaction.date > student.latestPaidPriceDate)) {
-            student.latestPaidPriceDate = transaction.date;
-            student.latestPaidPrice = price;
-          }
-        }
-      }
-
-      if (transaction.kind === "unused") {
-        student.unusedTransactions += 1;
-        student.unusedLessons += transaction.lessonCount;
-        student.pipelineValue += transaction.lessonPrice * transaction.lessonCount || 0;
-      }
-    }
-
-    let totalTrialStudents = 0;
-    let convertedStudents = 0;
-    let totalUnusedLessons = 0;
-    let totalPipelineValue = 0;
-
-    const studentSummaries = [...students.values()].map((student) => {
-      student.hasPaid = student.paidTransactions > 0;
-      student.converted = student.trialTransactions > 0 && student.hasPaid;
-      student.trialConversion = student.trialTransactions ? (student.converted ? 1 : 0) : null;
-      student.currentPricePoint = student.latestPaidPrice || (student.paidLessons ? student.income / student.paidLessons : 0);
-      student.studentSince = student.firstLessonDate;
-      student.lastActiveDate = student.lastLessonDate;
-      const daysSinceLastPaid = student.lastPaidDate ? Math.round((today - startOfDay(student.lastPaidDate)) / DAY_MS) : null;
-      if (!student.hasPaid) {
-        student.churnRisk = student.trialTransactions ? "unsicher" : "neue/inaktive";
-      } else if (daysSinceLastPaid === null) {
-        student.churnRisk = "unbekannt";
-      } else if (daysSinceLastPaid > 90) {
-        student.churnRisk = "hoch";
-      } else if (daysSinceLastPaid > 60) {
-        student.churnRisk = "mittel";
-      } else {
-        student.churnRisk = "niedrig";
-      }
-      const isActive = student.lastLessonDate && (today - startOfDay(student.lastLessonDate)) / DAY_MS <= 60;
-      student.priceIncreaseRecommendation = null;
-      student.priceIncreaseTarget = null;
-      const roundedPrice = Math.round(student.currentPricePoint);
-      if (isActive && student.hasPaid && (today - startOfDay(student.studentSince || today)) / DAY_MS > 30) {
-        if (roundedPrice === 19 && student.paidLessons >= 8) {
-          student.priceIncreaseRecommendation = "Erhöhe auf $23";
-          student.priceIncreaseTarget = 23;
-        } else if (roundedPrice === 23 && student.paidLessons >= 10 && student.paidLessons <= 12) {
-          student.priceIncreaseRecommendation = "Erhöhe auf $25";
-          student.priceIncreaseTarget = 25;
-        } else if (roundedPrice === 25 && student.paidLessons >= 12 && student.paidLessons <= 15) {
-          student.priceIncreaseRecommendation = "Erhöhe auf $27";
-          student.priceIncreaseTarget = 27;
-        }
-      }
-
-      if (student.trialTransactions) {
-        totalTrialStudents += 1;
-        if (student.converted) {
-          convertedStudents += 1;
-        }
-      }
-
-      totalUnusedLessons += student.unusedLessons;
-      totalPipelineValue += student.pipelineValue;
-      return student;
-    });
-
-    const churnRiskCounts = studentSummaries.reduce(
-      (counts, student) => {
-        counts[student.churnRisk] = (counts[student.churnRisk] || 0) + 1;
-        return counts;
-      },
-      { niedrig: 0, mittel: 0, hoch: 0, unsicher: 0, "neue/inaktive": 0, unbekannt: 0 }
-    );
-
-    return {
-      students: studentSummaries.sort((a, b) => b.income - a.income),
-      trialStudents: totalTrialStudents,
-      convertedStudents,
-      trialConversion: totalTrialStudents ? convertedStudents / totalTrialStudents : 0,
-      unusedLessons: totalUnusedLessons,
-      pipelineValue: totalPipelineValue,
-      churnRiskCounts,
-      priceRecommendations: studentSummaries.filter((student) => student.priceIncreaseRecommendation)
-    };
-  }
-
-  function buildPricePointStats(students) {
-    const points = new Map();
-
-    for (const student of students) {
-      const key = student.currentPricePoint ? String(Math.round(student.currentPricePoint)) : "unbekannt";
-      if (!points.has(key)) {
-        points.set(key, {
-          pricePoint: key,
-          studentCount: 0,
-          income: 0,
-          paidLessons: 0
-        });
-      }
-      const item = points.get(key);
-      item.studentCount += 1;
-      item.income += student.income;
-      item.paidLessons += student.paidLessons;
-    }
-
-    return [...points.values()].sort((a, b) => Number(b.pricePoint) - Number(a.pricePoint));
   }
 
   function filterTransactionsByDate(transactions, start, end) {
@@ -772,8 +728,7 @@
           lessonRate: month.paidLessons ? month.income / month.paidLessons : 0
         };
       })
-      .sort((a, b) => b.date - a.date)
-      .slice(0, 12);
+      .sort((a, b) => b.date - a.date);
   }
 
   function rankStudents(transactions) {
@@ -834,19 +789,16 @@
 
     updated.textContent = `Echtzeit-Kennzahlen aktualisiert: ${dateFormatter.format(state.updatedAt)}, ${timeFormatter.format(state.updatedAt)} Uhr.`;
     status.textContent = state.source === "report"
-      ? `Datenquelle: automatisch geladener CSV-Einnahmenbericht (${formatISODate(state.reportRange.start)} - ${formatISODate(state.reportRange.end)}).`
+      ? `Datenquelle: CSV-Einnahmenbericht ${formatISODate(state.reportRange.start)} - ${formatISODate(state.reportRange.end)}.`
       : "Datenquelle: sichtbare Preply-Kennzahlen. Der CSV-Bericht konnte noch nicht gelesen werden.";
 
     content.innerHTML = `
       <div class="pp-grid">
-        ${metricCard("Monatseinnahmen", money(state.metrics.monthlyIncome), deltaText(state.metrics.monthDelta))}
+        ${metricCard("Einnahmen gesamt", money(state.metrics.totalIncome), "seit Beginn")}
+        ${metricCard("Ø Auszahlung", money(state.metrics.avgPayoutCurrentMonth), "pro bezahlter Einheit im aktuellen Monat")}
+        ${metricCard("Ø Auszahlung", money(state.metrics.avgPayoutAllTime), "pro bezahlter Einheit seit Beginn")}
         ${metricCard("Prognose Monat", money(state.metrics.projectedIncome), "hochgerechnet bis Monatsende")}
-        ${metricCard("Einnahmen gesamt", money(state.metrics.totalIncome), state.metrics.yearToDateIncome ? `${money(state.metrics.yearToDateIncome)} seit Jahresbeginn` : "aus Preply-Lifetime-Kachel")}
-        ${state.metrics.avgHourlyRate
-          ? metricCard("Stundensatz", money(state.metrics.avgHourlyRate), `${number(state.metrics.monthlyHours)} h im Monat`)
-          : metricCard("Ø Auszahlung", money(calculateCurrentMonthBookingRate(state.monthlyBreakdown)), "pro bezahlter Einheit im aktuellen Monat")}
-        ${metricCard("Trial → Paid", state.studentAnalysis.trialStudents ? formatPercent(state.studentAnalysis.trialConversion) : "n/a", `${state.studentAnalysis.convertedStudents}/${state.studentAnalysis.trialStudents}`)}
-        ${metricCard("Pipeline-Wert", money(state.studentAnalysis.pipelineValue), `${number(state.studentAnalysis.unusedLessons)} ungenutzte Einheiten`)}
+        ${metricCard("Monatseinnahmen", money(state.metrics.monthlyIncome), deltaText(state.metrics.monthDelta))}
       </div>
       <div class="pp-panel pp-wide-panel">
         <div class="pp-panel-heading">
@@ -864,24 +816,13 @@
           <h3>Weitere Kennzahlen</h3>
           <div class="pp-insights">
             ${state.metrics.avgWeeklyHours
-              ? insight("Ø Wochenstunden", `${number(state.metrics.avgWeeklyHours)} h`, "im geladenen CSV-Zeitraum")
-              : insight("Ø Einheiten/Woche", number(state.metrics.avgWeeklyLessons), "im geladenen CSV-Zeitraum")}
-            ${insight("Schüler insgesamt", number(state.metrics.lifetimeStudents), "seit Start auf Preply")}
+              ? insight("Ø Wochenstunden", `${number(state.metrics.avgWeeklyHours)} h`, "seit Beginn")
+              : insight("Ø Einheiten/Woche", number(state.metrics.avgWeeklyLessons), "seit Beginn")}
+            ${insight("Schüler insgesamt", number(state.metrics.totalStudents), "seit Beginn")}
             ${insight("Aktive Schüler", number(state.metrics.activeStudents), "aktuell")}
-            ${insight("Ø Buchungen/Monat", number(state.metrics.avgMonthlyBookings), "im geladenen CSV-Zeitraum")}
-            ${insight("Churn-Risiko hoch/mittel", `${state.studentAnalysis.churnRiskCounts.hoch}/${state.studentAnalysis.churnRiskCounts.mittel}`, "letzte 60/90 Tage")}
+            ${insight("Ø Einheiten pro Monat", number(state.metrics.avgMonthlyLessons), "seit Beginn")}
           </div>
         </div>
-      </div>
-      <div class="pp-split">
-        <div class="pp-panel pp-wide-panel">
-          <h3>Preispoint-Analyse</h3>
-          ${renderPricePointTable(state.pricePointStats)}
-        </div>
-      </div>
-      <div class="pp-panel pp-wide-panel">
-        <h3>Empfohlene Preiserhöhungen</h3>
-        ${renderRecommendationTable(state.studentAnalysis.priceRecommendations)}
       </div>
       ${state.errors.length ? `<details class="pp-debug"><summary>Hinweise zur Datenerfassung</summary><pre>${escapeHtml(JSON.stringify(state.errors, null, 2))}</pre></details>` : ""}
     `;
@@ -967,7 +908,7 @@
             <tr>
               <td>${escapeHtml(formatMonth(month.date))}</td>
               <td>${money(month.income)}</td>
-              <td>${number(month.transactions)}</td>
+              <td>${number(month.lessons || month.transactions)}</td>
               ${hasHours ? `<td>${number(month.hours)}</td><td>${rateOrNA(month.hourlyRate)}</td>` : ""}
               <td>${formatPercent(summary.income ? month.income / summary.income : 0)}</td>
               <td>${rateOrNA(month.lessonRate || month.bookingRate)}</td>
@@ -976,7 +917,7 @@
           <tr class="pp-summary-row">
             <td>Durchschnitt</td>
             <td>${money(summary.avgIncome)}</td>
-            <td>${number(summary.avgTransactions)}</td>
+            <td>${number(summary.avgLessons)}</td>
             ${hasHours ? `<td>${number(summary.avgHours)}</td><td>${rateOrNA(summary.avgHourlyRate)}</td>` : ""}
             <td>${summary.monthCount ? formatPercent(1 / summary.monthCount) : "0%"}</td>
             <td>${rateOrNA(summary.avgPayout)}</td>
@@ -990,6 +931,7 @@
     const monthCount = months.length;
     const income = months.reduce((total, month) => total + month.income, 0);
     const transactions = months.reduce((total, month) => total + month.transactions, 0);
+    const lessons = months.reduce((total, month) => total + (month.lessons || month.transactions), 0);
     const paidLessons = months.reduce((total, month) => total + month.paidLessons, 0);
     const paidTransactions = months.reduce((total, month) => total + month.paidTransactions, 0);
     const hours = months.reduce((total, month) => total + month.hours, 0);
@@ -999,6 +941,7 @@
       income,
       avgIncome: monthCount ? income / monthCount : 0,
       avgTransactions: monthCount ? transactions / monthCount : 0,
+      avgLessons: monthCount ? lessons / monthCount : 0,
       avgHours: monthCount ? hours / monthCount : 0,
       avgHourlyRate: hours ? income / hours : 0,
       avgPayout: paidLessons ? income / paidLessons : paidTransactions ? income / paidTransactions : 0
@@ -1052,17 +995,13 @@
     return lessons / weeks;
   }
 
-  function calculateAverageMonthlyBookings(months) {
+  function calculateAverageMonthlyLessons(months) {
     if (!months.length) {
       return 0;
     }
 
-    const totalBookings = months.reduce((total, month) => total + month.transactions, 0);
-    return totalBookings / months.length;
-  }
-
-  function calculateCurrentMonthBookingRate(months) {
-    return months[0]?.bookingRate || 0;
+    const totalLessons = months.reduce((total, month) => total + (month.lessons || month.transactions), 0);
+    return totalLessons / months.length;
   }
 
   function metricCard(label, value, detail) {
@@ -1080,7 +1019,6 @@
       return `<p class="pp-empty">Noch keine Studentendaten gefunden. Öffne einmal den Einnahmenbericht als CSV oder prüfe im Debug-Hinweis, ob Preply die Spaltennamen geändert hat.</p>`;
     }
 
-    const hasLessons = students.some((student) => student.lessons > 0);
     const hasHours = students.some((student) => student.hours > 0);
 
     return `
@@ -1090,8 +1028,7 @@
             <th>Rang</th>
             <th>Lernende</th>
             <th>Einnahmen</th>
-            <th>Buchungen</th>
-            ${hasLessons ? "<th>Einheiten</th>" : ""}
+            <th>Einheiten</th>
             ${hasHours ? "<th>Stunden</th><th>Ø Stunde</th>" : ""}
             <th>Ø Auszahlung</th>
           </tr>
@@ -1102,70 +1039,9 @@
               <td>${index + 1}</td>
               <td>${escapeHtml(student.student)}</td>
               <td>${money(student.income)}</td>
-              <td>${number(student.transactions)}</td>
-              ${hasLessons ? `<td>${number(student.lessons)}</td>` : ""}
+              <td>${number(student.lessons || student.transactions)}</td>
               ${hasHours ? `<td>${number(student.hours)}</td><td>${rateOrNA(student.hourlyRate)}</td>` : ""}
               <td>${rateOrNA(student.lessonRate || student.bookingRate)}</td>
-            </tr>
-          `).join("")}
-        </tbody>
-      </table>
-    `;
-  }
-
-  function renderPricePointTable(points) {
-    if (!points.length) {
-      return `<p class="pp-empty">Keine Preispoint-Daten gefunden. Die CSV braucht dafür mindestens eine Lesson Price- oder Lesson Amount-Spalte.</p>`;
-    }
-
-    return `
-      <table class="pp-table">
-        <thead>
-          <tr>
-            <th>Preispoint</th>
-            <th>Schüler</th>
-            <th>Einnahmen</th>
-            <th>Bezahlte Einheiten</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${points.map((point) => `
-            <tr>
-              <td>${escapeHtml(point.pricePoint === "unbekannt" ? "unbekannt" : `$${point.pricePoint}`)}</td>
-              <td>${number(point.studentCount)}</td>
-              <td>${money(point.income)}</td>
-              <td>${number(point.paidLessons)}</td>
-            </tr>
-          `).join("")}
-        </tbody>
-      </table>
-    `;
-  }
-
-  function renderRecommendationTable(recommendations) {
-    if (!recommendations.length) {
-      return `<p class="pp-empty">Keine klaren Empfehlungskandidaten für Preiserhöhungen gefunden.</p>`;
-    }
-
-    return `
-      <table class="pp-table">
-        <thead>
-          <tr>
-            <th>Schüler</th>
-            <th>Aktueller Preis</th>
-            <th>Bezahlte Einheiten</th>
-            <th>Empfehlung</th>
-            <th>Risiko</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${recommendations.slice(0, 10).map((student) => `
-            <tr>
-              <td>${escapeHtml(student.student)}</td>
-              <td>${student.currentPricePoint ? `$${number(student.currentPricePoint)}` : "unbekannt"}</td>
-              <td>${number(student.paidLessons)}</td>
-              <td>${escapeHtml(student.priceIncreaseRecommendation)}</td>
-              <td>${escapeHtml(student.churnRisk)}</td>
             </tr>
           `).join("")}
         </tbody>

@@ -47,7 +47,14 @@
   margin: 0;
 }
 
-#pp-refresh {
+.pp-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+#pp-refresh,
+#pp-clear-cache {
   display: inline-grid;
   flex: 0 0 auto;
   width: 40px;
@@ -63,6 +70,11 @@
 
 #pp-refresh:hover {
   background: #f4f8ff;
+}
+
+#pp-clear-cache:hover {
+  background: #fff7ed;
+  color: #b45309;
 }
 
 .pp-content {

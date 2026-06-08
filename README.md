@@ -1,6 +1,6 @@
 # Preply Performance Plus
 
-Chrome extension that augments `https://preply.com/de/performance` with income analytics, monthly projection, lifetime totals, and student benchmarking.
+Chrome extension that augments `https://preply.com/de/performance` with income analytics, monthly projection, cached lifetime totals, and student benchmarking.
 
 ## Install locally
 
@@ -12,13 +12,13 @@ Chrome extension that augments `https://preply.com/de/performance` with income a
 
 ## How data is collected
 
-The extension first tries to fetch Preply's own earnings report endpoint in the page context, once per page load:
+The extension first tries to fetch Preply's own earnings report endpoint in the page context:
 
 `/tutor/download-earnings-report?timestampStart=YYYY-MM-DD&timestampEnd=YYYY-MM-DD&format=csv`
 
-That keeps the request authenticated with the existing Preply session and avoids opening the report dialog. To avoid unnecessary traffic, the automatic fetch requests only one CSV range, then derives month-to-date, previous-month, year-to-date, and student ranking locally where the CSV contains dates and student names. If Preply blocks the request, changes the endpoint, or returns a non-CSV response, the panel falls back to the numbers already visible on the performance page.
+That keeps the request authenticated with the existing Preply session and avoids opening the report dialog. To avoid unnecessary traffic, the extension stores parsed CSV transactions in `chrome.storage.local`. The first successful run requests the full available history; later runs only request the missing date range. If the cache already reaches today, no CSV request is made on page load. Use the clear-cache button in the panel header to delete the stored CSV data and rebuild the history from scratch.
 
-The parser explicitly supports Preply CSV columns such as `Schüler`, `Datum der Einheit`, `Type`, `Earning, USD`, and `Lesson Price` / `Lesson Price, USD`. It intentionally uses `Earning, USD` for tutor income and also derives current student price points, trial conversion, unused lesson pipeline, churn risk, and price-increase candidates.
+The parser explicitly supports Preply CSV columns such as `Schüler`, `Datum der Einheit`, `Type`, and `Earning, USD`. It intentionally uses `Earning, USD` for tutor income.
 
 The panel always shows an update timestamp in German, for example:
 
@@ -26,23 +26,19 @@ The panel always shows an update timestamp in German, for example:
 
 ## Current metrics
 
+- Total income since the first cached CSV transaction
+- Average payout per paid lesson for the current month
+- Average payout per paid lesson since the first cached CSV transaction
 - Current month income
-- Monthly income breakdown for the last 12 available CSV months
+- Monthly income breakdown by year
 - Year navigation for monthly income tables when multiple years are available
 - Projected month income
-- Total income
-- Average income per lesson
 - Average hourly rate when the CSV includes an actual duration/hour column
-- Average payout per paid lesson
 - Average lessons per week when hour columns are unavailable
-- Active students and total lifetime students
+- Active students and total students
 - Average weekly hours when the CSV includes an actual duration/hour column
-- Average bookings per month
-- Trial-to-paid conversion and student pipeline analysis
-- Pricepoint breakdown by student groups
-- Churn-risk category counts
-- Recommended price increases for eligible students
-- Top 10 student ranking by income, bookings, average per lesson, and hourly rate when the CSV includes the required columns
+- Average units per month
+- Top 10 student ranking by income, units, average payout per unit, and hourly rate when the CSV includes the required columns
 
 ## Next data check
 
