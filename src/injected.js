@@ -32,7 +32,8 @@
   }
 
   async function fetchStudents({ operationName, variables, query }) {
-    const response = await fetch(new URL("/graphql", window.location.origin).toString(), {
+    const endpoint = `/graphql/v2/${encodeURIComponent(operationName || "TutorStudentManagement")}`;
+    const response = await fetch(new URL(endpoint, window.location.origin).toString(), {
       method: "POST",
       credentials: "include",
       headers: {
