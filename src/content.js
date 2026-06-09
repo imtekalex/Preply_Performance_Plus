@@ -1153,71 +1153,33 @@
   }
 
   function buildPriceBenchmark(students) {
-    const groups = new Map();
     const pricedStudents = students.filter((student) => student.currentPrice > 0);
     const medianPrice = median(pricedStudents.map((student) => student.currentPrice));
+    const segmentSizes = new Map();
 
-    for (const student of students) {
-      const recommendation = getPriceRecommendation(student, medianPrice);
-      const enrichedStudent = {
-        ...student,
-        recommendation,
-        priceStatus: getPriceStatus(student, recommendation, medianPrice)
-      };
-      const key = student.currentPrice ? String(Math.round(student.currentPrice)) : "unbekannt";
-      if (!groups.has(key)) {
-        groups.set(key, {
-          price: student.currentPrice || 0,
-          label: student.currentPrice ? money(student.currentPrice) : "unbekannt",
-          students: [],
-          income: 0,
-          lessons: 0,
-          paidLessons: 0,
-          hasBalanceData: false,
-          outstandingHours: 0,
-          totalHours: 0,
-          utilisedHours: 0,
-          recentLessons: 0,
-          recommendationCount: 0,
-          urgentCount: 0,
-          endingSoonCount: 0,
-          maxPriority: 0
-        });
-      }
-
-      const group = groups.get(key);
-      group.students.push(enrichedStudent);
-      group.income += student.income;
-      group.lessons += student.lessons || student.transactions;
-      group.paidLessons += student.paidLessons || 0;
-      group.hasBalanceData = group.hasBalanceData || student.hasBalanceData;
-      group.outstandingHours += student.outstandingHours || 0;
-      group.totalHours += student.totalHours || 0;
-      group.utilisedHours += student.utilisedHours || 0;
-      group.recentLessons += student.recentLessons;
-      group.recommendationCount += recommendation ? 1 : 0;
-      group.urgentCount += recommendation?.priority === 3 ? 1 : 0;
-      group.endingSoonCount += isSubscriptionEndingSoon(student) ? 1 : 0;
-      group.maxPriority = Math.max(group.maxPriority, recommendation?.priority || 0);
+    for (const student of pricedStudents) {
+      const key = Math.round(student.currentPrice);
+      segmentSizes.set(key, (segmentSizes.get(key) || 0) + 1);
     }
 
-    return [...groups.values()]
-      .map((group) => ({
-        ...group,
-        students: group.students.sort((a, b) => a.student.localeCompare(b.student, "de")),
-        avgEarning: group.paidLessons ? group.income / group.paidLessons : 0,
-        studentCount: group.students.length,
-        avgLessonsPerStudent: group.students.length ? group.lessons / group.students.length : 0,
-        segmentStatus: summarizePriceSegment(group)
-      }))
+    return students
+      .map((student) => {
+        const recommendation = getPriceRecommendation(student, medianPrice);
+        return {
+          ...student,
+          recommendation,
+          priceStatus: getPriceStatus(student, recommendation, medianPrice),
+          segmentSize: student.currentPrice ? segmentSizes.get(Math.round(student.currentPrice)) || 1 : 0
+        };
+      })
       .sort((a, b) => {
-        if (!a.price) {
+        if (!a.currentPrice) {
           return 1;
         }
-        if (!b.price) {
+        if (!b.currentPrice) {
           return -1;
         }
-        return b.price - a.price;
+        return b.currentPrice - a.currentPrice || a.student.localeCompare(b.student, "de");
       });
   }
 
@@ -1290,14 +1252,16 @@
   function getPriceRecommendation(student, medianPrice) {
     const lessons = student.lessons || student.transactions;
     const lowComparedToMedian = medianPrice && student.currentPrice <= medianPrice * 0.9;
+    const veryLowComparedToMedian = medianPrice && student.currentPrice <= medianPrice * 0.8;
     const veryActive = student.recentLessons >= 8 || student.avgLessonsPerMonth >= 8;
     const highOutstandingBalance = student.outstandingHours >= 4;
     const steady = lessons >= 10 || student.avgLessonsPerMonth >= 4;
     const inactiveDays = student.lastPaidDate ? daysBetween(student.lastPaidDate, new Date()) : null;
     const priceIsOld = student.priceAgeDays !== null && student.priceAgeDays >= 120;
+    const priceIsVeryOld = student.priceAgeDays !== null && student.priceAgeDays >= 180;
     const endingSoon = isSubscriptionEndingSoon(student);
 
-    if (student.currentPrice && (veryActive || highOutstandingBalance || endingSoon) && (lowComparedToMedian || lessons >= 12 || priceIsOld)) {
+    if (student.currentPrice && (lowComparedToMedian || veryLowComparedToMedian) && (veryActive || highOutstandingBalance || endingSoon || priceIsVeryOld)) {
       return {
         action: "Preiserhöhung besprechen",
         reason: lowComparedToMedian
@@ -1319,7 +1283,7 @@
       };
     }
 
-    if (student.currentPrice && student.currentPrice <= medianPrice * 0.8 && inactiveDays !== null && inactiveDays > 90) {
+    if (student.currentPrice && veryLowComparedToMedian && inactiveDays !== null && inactiveDays > 90) {
       return {
         action: "Zusammenarbeit prüfen",
         reason: `${inactiveDays} Tage ohne bezahlte Einheit bei niedrigem Preis`,
@@ -1335,9 +1299,17 @@
       return recommendation;
     }
 
+    if (isSubscriptionEndingSoon(student)) {
+      return {
+        action: "bald fällig",
+        reason: "Abo/Paket endet in den nächsten 14 Tagen",
+        priority: 1
+      };
+    }
+
     if (student.currentPrice && medianPrice && student.currentPrice >= medianPrice * 1.1) {
       return {
-        action: "starkes Segment",
+        action: "stark",
         reason: `über Medianpreis ${money(medianPrice)}`,
         priority: 0
       };
@@ -1350,44 +1322,12 @@
     };
   }
 
-  function summarizePriceSegment(group) {
-    if (group.urgentCount) {
-      return {
-        label: `${number(group.urgentCount)} dringend`,
-        detail: "Preiserhöhung zeitnah prüfen",
-        priority: 3
-      };
-    }
-
-    if (group.recommendationCount) {
-      return {
-        label: `${number(group.recommendationCount)} prüfen`,
-        detail: "Preis wirkt teilweise veraltet",
-        priority: 2
-      };
-    }
-
-    if (group.endingSoonCount) {
-      return {
-        label: `${number(group.endingSoonCount)} bald fällig`,
-        detail: "Abo/Paket läuft bald",
-        priority: 1
-      };
-    }
-
-    return {
-      label: "ok",
-      detail: "kein klarer Handlungsbedarf",
-      priority: 0
-    };
-  }
-
   function isSubscriptionEndingSoon(student) {
     if (!student.nextSubscriptionDate) {
       return false;
     }
 
-    const days = daysBetween(new Date(), student.nextSubscriptionDate);
+    const days = daysUntil(student.nextSubscriptionDate);
     return days >= 0 && days <= 14;
   }
 
@@ -1411,6 +1351,14 @@
 
   function daysBetween(start, end) {
     return Math.max(0, Math.round((startOfDay(end) - startOfDay(start)) / DAY_MS));
+  }
+
+  function daysUntil(date) {
+    if (!date || Number.isNaN(date.getTime())) {
+      return null;
+    }
+
+    return Math.round((startOfDay(date) - startOfDay(new Date())) / DAY_MS);
   }
 
   function render(state) {
@@ -1671,8 +1619,8 @@
             <th>Rang</th>
             <th>Lernende</th>
             <th>Einnahmen</th>
-            <th>Einheiten</th>
-            <th>Genutzt / Gesamt</th>
+            <th>Bezahlte Einheiten</th>
+            <th>Abo-Einheiten</th>
             ${hasHours ? "<th>Stunden</th><th>Ø pro Stunde</th>" : ""}
             <th title="Lesson Price">Preis</th>
             <th title="Earning, USD pro bezahlter Einheit">Lohn</th>
@@ -1685,7 +1633,7 @@
               <td>${escapeHtml(student.student)}</td>
               <td>${money(student.income)}</td>
               <td>${number(student.lessons || student.transactions)}</td>
-              <td>${formatBalance(student)}</td>
+              <td>${renderBalanceProgress(student)}</td>
               ${hasHours ? `<td>${number(student.hours)}</td><td>${rateOrNA(student.hourlyRate)}</td>` : ""}
               <td>${rateOrNA(student.currentPrice)}</td>
               <td>${rateOrNA(student.lessonRate)}</td>
@@ -1696,8 +1644,8 @@
     `;
   }
 
-  function renderPriceBenchmark(groups) {
-    if (!groups.length) {
+  function renderPriceBenchmark(students) {
+    if (!students.length) {
       return `<p class="pp-empty">Noch keine Preisdaten gefunden. Dafür braucht die CSV die Spalte Lesson Price, USD.</p>`;
     }
 
@@ -1705,27 +1653,25 @@
       <table class="pp-table pp-price-table">
         <thead>
           <tr>
-            <th title="Lesson Price">Preissegment</th>
-            <th>Status</th>
+            <th title="Lesson Price">Preis</th>
+            <th title="Earning, USD pro bezahlter Einheit">Lohn</th>
             <th>Lernende</th>
-            <th>Namen und Hinweise</th>
-            <th title="Earning, USD pro bezahlter Einheit">Ø Lohn</th>
-            <th>Einheiten</th>
-            <th>Genutzt / Gesamt</th>
+            <th>Status</th>
+            <th>Bezahlte Einheiten</th>
+            <th>Abo-Einheiten</th>
             <th>Abo/Paket</th>
           </tr>
         </thead>
         <tbody>
-          ${groups.map((group) => `
-            <tr class="${group.maxPriority ? `pp-priority-row pp-priority-row-${group.maxPriority}` : ""}">
-              <td>${escapeHtml(group.label)}</td>
-              <td>${renderSegmentStatus(group)}</td>
-              <td>${number(group.studentCount)}</td>
-              <td>${renderStudentChips(group.students)}</td>
-              <td>${rateOrNA(group.avgEarning)}</td>
-              <td>${number(group.lessons)}</td>
-              <td>${formatBalance(group)}</td>
-              <td>${formatEndingSoon(group)}</td>
+          ${students.map((student) => `
+            <tr class="${student.priceStatus?.priority ? `pp-priority-row pp-priority-row-${student.priceStatus.priority}` : ""}">
+              <td>${rateOrNA(student.currentPrice)}</td>
+              <td>${rateOrNA(student.lessonRate)}</td>
+              <td>${renderStudentNameWithMeta(student)}</td>
+              <td>${renderStudentPriceStatus(student)}</td>
+              <td>${number(student.lessons || student.transactions)}</td>
+              <td>${renderBalanceProgress(student)}</td>
+              <td>${formatSubscription(student)}</td>
             </tr>
           `).join("")}
         </tbody>
@@ -1733,65 +1679,49 @@
     `;
   }
 
-  function renderStudentChips(students) {
-    const sortedStudents = [...students].sort((a, b) => a.student.localeCompare(b.student, "de"));
-    const visibleStudents = sortedStudents.slice(0, 8);
-    const hiddenCount = students.length - visibleStudents.length;
-    const chips = visibleStudents
-      .map(renderStudentChip)
-      .join("");
-    const hiddenChips = sortedStudents
-      .slice(8)
-      .map(renderStudentChip)
-      .join("");
-
+  function renderStudentNameWithMeta(student) {
+    const title = buildStudentPriceTitle(student);
+    const segmentText = student.segmentSize > 1 ? `${number(student.segmentSize)} in diesem Preis` : "einzeln";
     return `
-      <div class="pp-chip-list">
-        ${chips}
-        ${hiddenCount > 0 ? `
-          <details class="pp-chip-details">
-            <summary class="pp-chip">+${hiddenCount}</summary>
-            <div class="pp-chip-list pp-chip-list-extra">${hiddenChips}</div>
-          </details>
-        ` : ""}
-      </div>
+      <span class="pp-student-name" title="${escapeHtml(title)}">${escapeHtml(student.student)}</span>
+      <small class="pp-muted">${escapeHtml(segmentText)}</small>
     `;
   }
 
-  function renderStudentChip(student) {
-    const priority = student.recommendation?.priority || 0;
-    const titleParts = [
-      student.student,
-      student.currentPrice ? `Preis: ${money(student.currentPrice)}` : "",
-      student.firstPrice && student.firstPrice !== student.currentPrice ? `Erstpreis: ${money(student.firstPrice)}` : "",
-      student.priceAgeDays !== null ? `Preis seit ${student.priceAgeDays} Tagen` : "",
-      student.priceStatus?.action,
-      student.priceStatus?.reason,
-      student.nextSubscriptionDate ? `Abo: ${formatShortDate(student.nextSubscriptionDate)}` : ""
-    ].filter(Boolean);
-
-    return `<span class="pp-chip pp-chip-priority-${priority}" title="${escapeHtml(titleParts.join(" - "))}">${escapeHtml(student.student)}</span>`;
-  }
-
-  function renderSegmentStatus(group) {
-    const priority = group.segmentStatus?.priority || 0;
+  function renderStudentPriceStatus(student) {
+    const status = student.priceStatus || { action: "ok", reason: "", priority: 0 };
     return `
-      <span class="pp-badge pp-badge-${priority}">${escapeHtml(group.segmentStatus?.label || "ok")}</span>
-      <small class="pp-muted">${escapeHtml(group.segmentStatus?.detail || "")}</small>
+      <span class="pp-badge pp-badge-${status.priority || 0}" title="${escapeHtml(buildStudentPriceTitle(student))}">${escapeHtml(status.action)}</span>
+      ${status.reason ? `<small class="pp-muted">${escapeHtml(status.reason)}</small>` : ""}
     `;
   }
 
-  function formatEndingSoon(group) {
-    const dates = group.students
-      .map((student) => student.nextSubscriptionDate)
-      .filter(Boolean)
-      .sort((a, b) => a - b);
+  function formatSubscription(student) {
+    if (!student.nextSubscriptionDate) {
+      return student.billingFrequency ? escapeHtml(student.billingFrequency) : "n/a";
+    }
 
-    if (!dates.length) {
+    const days = daysUntil(student.nextSubscriptionDate);
+    const prefix = days >= 0 && days <= 14 ? "bald · " : "";
+    return `${prefix}${formatShortDate(student.nextSubscriptionDate)}`;
+  }
+
+  function renderBalanceProgress(item) {
+    if (!item?.hasBalanceData) {
       return "n/a";
     }
 
-    return `${group.endingSoonCount ? `${number(group.endingSoonCount)} bald · ` : ""}${formatShortDate(dates[0])}`;
+    const total = Number(item.totalHours || 0);
+    const used = Number(item.utilisedHours || 0);
+    const percent = total ? Math.max(0, Math.min(100, (used / total) * 100)) : 0;
+    return `
+      <div class="pp-progress-cell" title="${escapeHtml(formatBalance(item))}">
+        <div class="pp-progress" role="progressbar" aria-label="Abo-Einheiten ${escapeHtml(formatBalance(item))}" aria-valuenow="${used}" aria-valuemin="0" aria-valuemax="${total}">
+          <span style="width: ${percent}%"></span>
+        </div>
+        <span>${formatBalance(item)}</span>
+      </div>
+    `;
   }
 
   function formatBalance(item) {
@@ -1800,6 +1730,18 @@
     }
 
     return `${number(item.utilisedHours)} / ${number(item.totalHours)}`;
+  }
+
+  function buildStudentPriceTitle(student) {
+    return [
+      student.student,
+      student.currentPrice ? `Preis: ${money(student.currentPrice)}` : "",
+      student.firstPrice && student.firstPrice !== student.currentPrice ? `Erstpreis: ${money(student.firstPrice)}` : "",
+      student.priceAgeDays !== null ? `Preis seit ${student.priceAgeDays} Tagen` : "",
+      student.priceStatus?.action,
+      student.priceStatus?.reason,
+      student.nextSubscriptionDate ? `Abo/Paket: ${formatShortDate(student.nextSubscriptionDate)}` : ""
+    ].filter(Boolean).join(" - ");
   }
 
   function formatShortDate(date) {

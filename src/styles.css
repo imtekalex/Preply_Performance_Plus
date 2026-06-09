@@ -235,17 +235,22 @@
 
 .pp-price-table th:nth-child(1),
 .pp-price-table td:nth-child(1) {
-  width: 100px;
+  width: 92px;
 }
 
 .pp-price-table th:nth-child(2),
 .pp-price-table td:nth-child(2) {
-  width: 150px;
+  width: 92px;
 }
 
 .pp-price-table th:nth-child(3),
 .pp-price-table td:nth-child(3) {
-  width: 78px;
+  width: 170px;
+}
+
+.pp-price-table th:nth-child(4),
+.pp-price-table td:nth-child(4) {
+  width: 190px;
 }
 
 .pp-price-table th:nth-child(5),
@@ -253,12 +258,11 @@
 .pp-price-table th:nth-child(6),
 .pp-price-table td:nth-child(6),
 .pp-price-table th:nth-child(7),
-.pp-price-table td:nth-child(7),
-.pp-price-table th:nth-child(8),
-.pp-price-table td:nth-child(8) {
-  width: 112px;
+.pp-price-table td:nth-child(7) {
+  width: 128px;
 }
 
+.pp-price-table td:nth-child(3),
 .pp-price-table td:nth-child(4) {
   white-space: normal;
 }
@@ -279,42 +283,6 @@
   font-weight: 700;
 }
 
-.pp-chip-list {
-  display: flex;
-  width: 100%;
-  min-width: 0;
-  flex-wrap: wrap;
-  gap: 4px;
-  align-items: flex-start;
-}
-
-.pp-chip-details {
-  display: inline-flex;
-  min-width: 0;
-}
-
-.pp-chip-details summary {
-  cursor: pointer;
-  list-style: none;
-}
-
-.pp-chip-details summary::-webkit-details-marker {
-  display: none;
-}
-
-.pp-chip-details[open] summary {
-  display: none;
-}
-
-.pp-chip-list-extra {
-  display: flex;
-  width: 100%;
-  min-width: 0;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.pp-chip,
 .pp-badge {
   display: inline-flex;
   align-items: center;
@@ -327,27 +295,40 @@
   white-space: nowrap;
 }
 
-.pp-chip {
-  padding: 4px 8px;
-  background: #e8f2ff;
-  color: #0f4f8f;
+.pp-student-name {
+  display: block;
   overflow: hidden;
+  color: #0f172a;
+  font-weight: 700;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.pp-chip-priority-3 {
-  background: #fee2e2;
-  color: #991b1b;
+.pp-progress-cell {
+  display: grid;
+  min-width: 104px;
+  gap: 4px;
 }
 
-.pp-chip-priority-2 {
-  background: #fef3c7;
-  color: #92400e;
+.pp-progress-cell > span {
+  color: #334155;
+  font-size: 12px;
+  font-weight: 650;
 }
 
-.pp-chip-priority-1 {
-  background: #ffedd5;
-  color: #9a3412;
+.pp-progress {
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.pp-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #0f72d6;
 }
 
 .pp-badge {
@@ -382,6 +363,10 @@
 
 .pp-priority-row-2 td {
   background: #fffbeb;
+}
+
+.pp-priority-row-1 td {
+  background: #fff7ed;
 }
 
 .pp-muted {
