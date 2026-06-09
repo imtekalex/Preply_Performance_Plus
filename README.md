@@ -45,6 +45,15 @@ The panel always shows an update timestamp in German, for example:
 
 Price review hints are intentionally conservative. They infer possible price conversations from CSV history plus Preply's current-student balance and subscription data when available; they do not know your real availability, message demand, student context, or relationship quality.
 
+The price-review signal currently combines:
+
+- price below the active-student median (`<= 90%`, or `<= 80%` for very low)
+- demand/usage pressure: at least 8 paid units in the last 30 days, at least 8 average units per active month, or at least 4 remaining subscription/package units
+- timing: subscription/package renewal within 14 days
+- price age: current price unchanged for at least 120 days, or 180 days for stronger urgency
+
+`Preiserhöhung besprechen` appears only when a low price combines with usage pressure, renewal timing, or a very old price. `Preis prüfen` is a softer hint for stable learners with a below-median or old price. `bald fällig` only marks renewal timing and is not by itself a price problem.
+
 ## Next data check
 
 If the student ranking stays empty, open DevTools on the Preply performance page and run:
