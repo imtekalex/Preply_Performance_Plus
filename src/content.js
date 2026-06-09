@@ -6,6 +6,7 @@
   const STUDENT_MESSAGE_RESPONSE = "PREPLY_PLUS_STUDENTS_RESULT";
   const DAY_MS = 24 * 60 * 60 * 1000;
   const CACHE_KEY = "preplyPlusTransactionCache";
+  const STUDENT_CACHE_KEY = "preplyPlusStudentCache";
   const CACHE_VERSION = 2;
   const DEFAULT_HISTORY_START = "2000-01-01";
   const STUDENT_PAGE_SIZE = 20;
@@ -170,8 +171,9 @@
 
     try {
       const visible = scrapeVisibleMetrics();
-      const cache = await loadTransactionCache();
-      activeReportRanges = buildRanges(cache, {
+      const transactionCache = await loadTransactionCache();
+      const studentCache = await loadStudentCache();
+      activeReportRanges = buildRanges(transactionCache, {
         fetchLatest,
         historyStart: visible.memberSinceStart || DEFAULT_HISTORY_START
       });
@@ -185,8 +187,8 @@
         }
       }
 
-      reportResult = await mergeReportResultWithCache(cache, reportResult);
-      const studentResult = await requestActiveStudents();
+      reportResult = await mergeReportResultWithCache(transactionCache, reportResult);
+      const studentResult = await getActiveStudentsWithCache(studentCache, { force: fetchLatest });
       lastState = buildState(visible, reportResult, studentResult);
       render(lastState);
       if (!force) {
@@ -233,25 +235,25 @@
       scheduleRefresh(0, {
         force: true,
         fetchLatest: true,
-        statusMessage: "Aktualisiere Kennzahlen: hole aktuelle CSV-Daten und behalte gespeicherte Historie ..."
+        statusMessage: "Aktualisiere Kennzahlen: hole aktuelle CSV-Daten und Lernendenliste neu, gespeicherte Historie bleibt erhalten ..."
       });
     });
   }
 
   async function confirmAndClearCache() {
     const confirmed = window.confirm(
-      "Gespeicherte CSV-Daten löschen? Danach lädt Preply Performance Plus den kompletten Einnahmenbericht seit Beginn neu."
+      "Gespeicherte CSV- und Lernenden-Daten löschen? Danach lädt Preply Performance Plus den kompletten Einnahmenbericht seit Beginn und die aktuelle Lernendenliste neu."
     );
     if (!confirmed) {
       return;
     }
 
-    await clearTransactionCache();
+    await clearAllCaches();
     hasAutoLoaded = false;
     selectedMonthYear = null;
     scheduleRefresh(0, {
       force: true,
-      statusMessage: "Gespeicherte CSV-Daten gelöscht. Lade den kompletten Einnahmenbericht seit Beginn neu ..."
+      statusMessage: "Gespeicherte Daten gelöscht. Lade Einnahmenbericht seit Beginn und aktuelle Lernendenliste neu ..."
     });
   }
 
@@ -500,8 +502,67 @@
     });
   }
 
-  function clearTransactionCache() {
-    return new Promise((resolve) => chrome.storage.local.remove(CACHE_KEY, resolve));
+  function loadStudentCache() {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(STUDENT_CACHE_KEY, (result) => {
+        const cache = result?.[STUDENT_CACHE_KEY];
+        if (!cache || cache.version !== CACHE_VERSION || !Array.isArray(cache.students)) {
+          resolve({ students: [], totalCount: 0, updatedAt: null });
+          return;
+        }
+
+        resolve({
+          totalCount: cache.totalCount || cache.students.length,
+          updatedAt: cache.updatedAt || null,
+          students: cache.students.map(deserializeManagedStudent).filter(Boolean)
+        });
+      });
+    });
+  }
+
+  function saveStudentCache(result) {
+    return new Promise((resolve) => {
+      chrome.storage.local.set({
+        [STUDENT_CACHE_KEY]: {
+          version: CACHE_VERSION,
+          totalCount: result.totalCount || result.students?.length || 0,
+          updatedAt: new Date().toISOString(),
+          students: (result.students || []).map(serializeManagedStudent)
+        }
+      }, resolve);
+    });
+  }
+
+  function clearAllCaches() {
+    return new Promise((resolve) => chrome.storage.local.remove([CACHE_KEY, STUDENT_CACHE_KEY], resolve));
+  }
+
+  async function getActiveStudentsWithCache(cache, { force = false } = {}) {
+    if (!force && isToday(cache.updatedAt) && cache.students.length) {
+      return {
+        source: "studentManagementCache",
+        totalCount: cache.totalCount || cache.students.length,
+        students: cache.students,
+        errors: []
+      };
+    }
+
+    const result = await requestActiveStudents();
+    if (result.students.length) {
+      await saveStudentCache(result);
+      return result;
+    }
+
+    if (cache.students.length) {
+      return {
+        source: "studentManagementStaleCache",
+        totalCount: cache.totalCount || cache.students.length,
+        students: cache.students,
+        errors: result.errors || []
+      };
+    }
+
+    return result;
   }
 
   async function mergeReportResultWithCache(cache, reportResult) {
@@ -554,6 +615,24 @@
     return {
       ...transaction,
       date: transaction.date ? new Date(transaction.date) : null
+    };
+  }
+
+  function serializeManagedStudent(student) {
+    return {
+      ...student,
+      nextLessonDate: student.nextLessonDate ? student.nextLessonDate.toISOString() : null
+    };
+  }
+
+  function deserializeManagedStudent(student) {
+    if (!student || typeof student !== "object") {
+      return null;
+    }
+
+    return {
+      ...student,
+      nextLessonDate: student.nextLessonDate ? new Date(student.nextLessonDate) : null
     };
   }
 
@@ -1241,8 +1320,9 @@
     }
 
     updated.textContent = `Echtzeit-Kennzahlen aktualisiert: ${dateFormatter.format(state.updatedAt)}, ${timeFormatter.format(state.updatedAt)} Uhr.`;
+    const studentSourceText = formatStudentSource(state.studentSource);
     status.innerHTML = state.source === "report"
-      ? `Datenquelle: CSV-Einnahmenbericht ${formatISODate(state.reportRange.start)} - ${formatISODate(state.reportRange.end)}. <button id="pp-clear-cache-link" class="pp-clear-link" type="button">Löschen</button>`
+      ? `Datenquelle: CSV-Einnahmenbericht ${formatISODate(state.reportRange.start)} - ${formatISODate(state.reportRange.end)}.${studentSourceText} <button id="pp-clear-cache-link" class="pp-clear-link" type="button">Löschen</button>`
       : "Datenquelle: sichtbare Preply-Kennzahlen. Der CSV-Bericht konnte noch nicht gelesen werden.";
 
     content.innerHTML = `
@@ -1628,6 +1708,22 @@
     return `${number(item.utilisedHours)} / ${number(item.totalHours)}`;
   }
 
+  function formatStudentSource(source) {
+    if (source === "studentManagement") {
+      return " Lernendenliste: live geladen.";
+    }
+
+    if (source === "studentManagementCache") {
+      return " Lernendenliste: heute gespeichert.";
+    }
+
+    if (source === "studentManagementStaleCache") {
+      return " Lernendenliste: gespeicherter Snapshot.";
+    }
+
+    return "";
+  }
+
   function insight(label, value, detail = "") {
     return `
       <div class="pp-insight">
@@ -1830,6 +1926,19 @@
     const month = String(date.getMonth() + 1).padStart(2, "0");
     const day = String(date.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
+  }
+
+  function isToday(value) {
+    if (!value) {
+      return false;
+    }
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return false;
+    }
+
+    return toISODate(date) === toISODate(new Date());
   }
 
   function escapeHtml(value) {
