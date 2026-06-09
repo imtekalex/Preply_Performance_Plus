@@ -255,25 +255,45 @@
 
 .pp-price-group-row > td {
   background: #f8fafc;
-  vertical-align: top;
+  vertical-align: middle;
 }
 
-.pp-price-group {
-  width: 100%;
-}
-
-.pp-price-group summary {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, max-content));
-  gap: 14px;
-  align-items: center;
-  color: #334155;
+.pp-price-group-row {
   cursor: pointer;
-  font-weight: 700;
 }
 
-.pp-price-group summary::marker {
-  color: #0450b4;
+.pp-price-group-row:hover > td {
+  background: #eef6ff;
+}
+
+.pp-price-group-row:focus-visible > td {
+  outline: 2px solid #0f72d6;
+  outline-offset: -2px;
+}
+
+.pp-price-group-row[aria-expanded="true"] .pp-row-caret {
+  transform: rotate(90deg);
+}
+
+.pp-row-caret {
+  display: inline-block;
+  width: 0;
+  height: 0;
+  margin-right: 8px;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 7px solid #0450b4;
+  transition: transform 160ms ease;
+  transform-origin: 35% 50%;
+}
+
+.pp-hidden {
+  display: none;
+}
+
+.pp-price-detail-row > td {
+  padding: 0 8px 12px;
+  background: #ffffff;
 }
 
 .pp-price-detail-table {

@@ -1452,6 +1452,7 @@
       ${state.errors.length ? `<details class="pp-debug"><summary>Hinweise zur Datenerfassung</summary><pre>${escapeHtml(JSON.stringify(state.errors, null, 2))}</pre></details>` : ""}
     `;
     bindMonthPager();
+    bindPriceGroups();
     document.getElementById("pp-clear-cache-link")?.addEventListener("click", confirmAndClearCache);
   }
 
@@ -1701,46 +1702,70 @@
           </tr>
         </thead>
         <tbody>
-          ${groups.map(renderPriceGroup).join("")}
+          ${groups.map((group, index) => renderPriceGroup(group, index)).join("")}
         </tbody>
       </table>
     `;
   }
 
-  function renderPriceGroup(group) {
-    const open = group.maxPriority >= 2 ? " open" : "";
+  function renderPriceGroup(group, index) {
+    const isOpen = group.maxPriority >= 2;
+    const groupId = `pp-price-group-${index}`;
     return `
-      <tr class="pp-price-group-row ${group.maxPriority ? `pp-priority-row pp-priority-row-${group.maxPriority}` : ""}">
-        <td>${escapeHtml(group.label)}</td>
+      <tr class="pp-price-group-row ${group.maxPriority ? `pp-priority-row pp-priority-row-${group.maxPriority}` : ""}" data-pp-group="${groupId}" role="button" tabindex="0" aria-expanded="${isOpen ? "true" : "false"}">
+        <td><span class="pp-row-caret" aria-hidden="true"></span>${escapeHtml(group.label)}</td>
         <td>${rateOrNA(group.avgEarning)}</td>
-        <td colspan="5">
-          <details class="pp-price-group"${open}>
-            <summary>
-              <span>${number(group.studentCount)} Lernende</span>
-              <span>${money(group.income)}</span>
-              <span>${number(group.lessons)} Einheiten</span>
-              <span>${formatBalance(group)}</span>
-            </summary>
-            <table class="pp-price-detail-table">
-              <thead>
-                <tr>
-                  <th>Lernende</th>
-                  <th>Preis</th>
-                  <th>Lohn</th>
-                  <th>Status</th>
-                  <th>Einnahmen</th>
-                  <th>Einheiten</th>
-                  <th>Abo-Einheiten</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${group.students.map(renderPriceStudentRow).join("")}
-              </tbody>
-            </table>
-          </details>
+        <td>${number(group.studentCount)} Lernende</td>
+        <td>${renderGroupPriceStatus(group)}</td>
+        <td>${money(group.income)}</td>
+        <td>${number(group.lessons)} Einheiten</td>
+        <td>${formatBalance(group)}</td>
+      </tr>
+      <tr class="pp-price-detail-row ${isOpen ? "" : "pp-hidden"}" data-pp-group-details="${groupId}">
+        <td colspan="7">
+          <table class="pp-price-detail-table">
+            <thead>
+              <tr>
+                <th>Lernende</th>
+                <th>Preis</th>
+                <th>Lohn</th>
+                <th>Status</th>
+                <th>Einnahmen</th>
+                <th>Einheiten</th>
+                <th>Abo-Einheiten</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${group.students.map(renderPriceStudentRow).join("")}
+            </tbody>
+          </table>
         </td>
       </tr>
     `;
+  }
+
+  function bindPriceGroups() {
+    document.querySelectorAll("[data-pp-group]").forEach((row) => {
+      const toggle = () => {
+        const groupId = row.getAttribute("data-pp-group");
+        const detailRow = document.querySelector(`[data-pp-group-details="${groupId}"]`);
+        if (!detailRow) {
+          return;
+        }
+
+        const isOpen = row.getAttribute("aria-expanded") === "true";
+        row.setAttribute("aria-expanded", isOpen ? "false" : "true");
+        detailRow.classList.toggle("pp-hidden", isOpen);
+      };
+
+      row.addEventListener("click", toggle);
+      row.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          toggle();
+        }
+      });
+    });
   }
 
   function renderPriceStudentRow(student) {
@@ -1770,6 +1795,27 @@
       <span class="pp-badge pp-badge-${status.priority || 0}" title="${escapeHtml(buildStudentPriceTitle(student))}">${escapeHtml(status.action)}</span>
       ${status.reason ? `<small class="pp-muted">${escapeHtml(status.reason)}</small>` : ""}
     `;
+  }
+
+  function renderGroupPriceStatus(group) {
+    const status = getGroupPriceStatus(group);
+    return `<span class="pp-badge pp-badge-${status.priority}">${escapeHtml(status.label)}</span>`;
+  }
+
+  function getGroupPriceStatus(group) {
+    if (group.maxPriority >= 3) {
+      return { label: "dringend", priority: 3 };
+    }
+
+    if (group.maxPriority === 2) {
+      return { label: "prüfen", priority: 2 };
+    }
+
+    if (group.maxPriority === 1) {
+      return { label: "bald fällig", priority: 1 };
+    }
+
+    return { label: "ok", priority: 0 };
   }
 
   function formatSubscription(student) {
