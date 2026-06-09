@@ -1155,31 +1155,63 @@
   function buildPriceBenchmark(students) {
     const pricedStudents = students.filter((student) => student.currentPrice > 0);
     const medianPrice = median(pricedStudents.map((student) => student.currentPrice));
-    const segmentSizes = new Map();
+    const groups = new Map();
 
-    for (const student of pricedStudents) {
-      const key = Math.round(student.currentPrice);
-      segmentSizes.set(key, (segmentSizes.get(key) || 0) + 1);
-    }
-
-    return students
+    const enrichedStudents = students
       .map((student) => {
         const recommendation = getPriceRecommendation(student, medianPrice);
         return {
           ...student,
           recommendation,
-          priceStatus: getPriceStatus(student, recommendation, medianPrice),
-          segmentSize: student.currentPrice ? segmentSizes.get(Math.round(student.currentPrice)) || 1 : 0
+          priceStatus: getPriceStatus(student, recommendation, medianPrice)
         };
-      })
+      });
+
+    for (const student of enrichedStudents) {
+      const key = student.currentPrice ? String(Math.round(student.currentPrice)) : "unbekannt";
+      if (!groups.has(key)) {
+        groups.set(key, {
+          price: student.currentPrice || 0,
+          label: student.currentPrice ? money(student.currentPrice) : "unbekannt",
+          students: [],
+          income: 0,
+          lessons: 0,
+          paidLessons: 0,
+          hasBalanceData: false,
+          outstandingHours: 0,
+          totalHours: 0,
+          utilisedHours: 0,
+          maxPriority: 0
+        });
+      }
+
+      const group = groups.get(key);
+      group.students.push(student);
+      group.income += student.income;
+      group.lessons += student.lessons || student.transactions;
+      group.paidLessons += student.paidLessons || 0;
+      group.hasBalanceData = group.hasBalanceData || student.hasBalanceData;
+      group.outstandingHours += student.outstandingHours || 0;
+      group.totalHours += student.totalHours || 0;
+      group.utilisedHours += student.utilisedHours || 0;
+      group.maxPriority = Math.max(group.maxPriority, student.priceStatus?.priority || 0);
+    }
+
+    return [...groups.values()]
+      .map((group) => ({
+        ...group,
+        avgEarning: group.paidLessons ? group.income / group.paidLessons : 0,
+        studentCount: group.students.length,
+        students: group.students.sort((a, b) => a.student.localeCompare(b.student, "de"))
+      }))
       .sort((a, b) => {
-        if (!a.currentPrice) {
+        if (!a.price) {
           return 1;
         }
-        if (!b.currentPrice) {
+        if (!b.price) {
           return -1;
         }
-        return b.currentPrice - a.currentPrice || a.student.localeCompare(b.student, "de");
+        return b.price - a.price;
       });
   }
 
@@ -1644,8 +1676,8 @@
     `;
   }
 
-  function renderPriceBenchmark(students) {
-    if (!students.length) {
+  function renderPriceBenchmark(groups) {
+    if (!groups.length) {
       return `<p class="pp-empty">Noch keine Preisdaten gefunden. Dafür braucht die CSV die Spalte Lesson Price, USD.</p>`;
     }
 
@@ -1655,36 +1687,61 @@
           <tr>
             <th title="Lesson Price">Preis</th>
             <th title="Earning, USD pro bezahlter Einheit">Lohn</th>
-            <th>Lernende</th>
+            <th>Details</th>
             <th>Status</th>
+            <th>Einnahmen</th>
             <th>Bezahlte Einheiten</th>
             <th>Abo-Einheiten</th>
-            <th>Abo/Paket</th>
           </tr>
         </thead>
         <tbody>
-          ${students.map((student) => `
-            <tr class="${student.priceStatus?.priority ? `pp-priority-row pp-priority-row-${student.priceStatus.priority}` : ""}">
-              <td>${rateOrNA(student.currentPrice)}</td>
-              <td>${rateOrNA(student.lessonRate)}</td>
-              <td>${renderStudentNameWithMeta(student)}</td>
-              <td>${renderStudentPriceStatus(student)}</td>
-              <td>${number(student.lessons || student.transactions)}</td>
-              <td>${renderBalanceProgress(student)}</td>
-              <td>${formatSubscription(student)}</td>
-            </tr>
-          `).join("")}
+          ${groups.map(renderPriceGroup).join("")}
         </tbody>
       </table>
     `;
   }
 
+  function renderPriceGroup(group) {
+    const open = group.maxPriority >= 2 ? " open" : "";
+    return `
+      <tr class="pp-price-group-row ${group.maxPriority ? `pp-priority-row pp-priority-row-${group.maxPriority}` : ""}">
+        <td>${escapeHtml(group.label)}</td>
+        <td>${rateOrNA(group.avgEarning)}</td>
+        <td colspan="5">
+          <details class="pp-price-group"${open}>
+            <summary>
+              <span>${number(group.studentCount)} Lernende</span>
+              <span>${money(group.income)}</span>
+              <span>${number(group.lessons)} Einheiten</span>
+              <span>${formatBalance(group)}</span>
+            </summary>
+            <table class="pp-price-detail-table">
+              <tbody>
+                ${group.students.map(renderPriceStudentRow).join("")}
+              </tbody>
+            </table>
+          </details>
+        </td>
+      </tr>
+    `;
+  }
+
+  function renderPriceStudentRow(student) {
+    return `
+      <tr class="${student.priceStatus?.priority ? `pp-priority-row pp-priority-row-${student.priceStatus.priority}` : ""}">
+        <td>${renderStudentNameWithMeta(student)}</td>
+        <td>${renderStudentPriceStatus(student)}</td>
+        <td>${money(student.income)}</td>
+        <td>${number(student.lessons || student.transactions)}</td>
+        <td>${renderBalanceProgress(student, { showSubscription: true })}</td>
+      </tr>
+    `;
+  }
+
   function renderStudentNameWithMeta(student) {
     const title = buildStudentPriceTitle(student);
-    const segmentText = student.segmentSize > 1 ? `${number(student.segmentSize)} in diesem Preis` : "einzeln";
     return `
       <span class="pp-student-name" title="${escapeHtml(title)}">${escapeHtml(student.student)}</span>
-      <small class="pp-muted">${escapeHtml(segmentText)}</small>
     `;
   }
 
@@ -1706,9 +1763,9 @@
     return `${prefix}${formatShortDate(student.nextSubscriptionDate)}`;
   }
 
-  function renderBalanceProgress(item) {
+  function renderBalanceProgress(item, { showSubscription = false } = {}) {
     if (!item?.hasBalanceData) {
-      return "n/a";
+      return showSubscription && item ? `<span>n/a</span><small class="pp-muted">${formatSubscription(item)}</small>` : "n/a";
     }
 
     const total = Number(item.totalHours || 0);
@@ -1720,6 +1777,7 @@
           <span style="width: ${percent}%"></span>
         </div>
         <span>${formatBalance(item)}</span>
+        ${showSubscription ? `<small class="pp-muted">${formatSubscription(item)}</small>` : ""}
       </div>
     `;
   }
