@@ -8,6 +8,7 @@
   const CACHE_KEY = "preplyPlusTransactionCache";
   const STUDENT_CACHE_KEY = "preplyPlusStudentCache";
   const CACHE_VERSION = 2;
+  const STUDENT_CACHE_VERSION = 3;
   const DEFAULT_HISTORY_START = "2000-01-01";
   const STUDENT_PAGE_SIZE = 20;
   const STUDENT_MANAGEMENT_QUERY = `query TutorStudentManagement($offset: Int!, $count: Int!, $archivedByTutor: Boolean, $orderField: TutoringSortFieldsEnum!, $orderDirection: CommonSortDirectionsEnum!, $includeOngoing: Boolean!, $clientName: String, $statuses: [TutoringStatusEnum!], $smartFilter: TutoringSmartFilter) {
@@ -40,6 +41,12 @@
           nextLesson(includeOngoing: $includeOngoing) {
             id
             datetime
+            __typename
+          }
+          refill {
+            id
+            billingFrequency
+            nextSubscription
             __typename
           }
           __typename
@@ -439,7 +446,9 @@
       outstandingHours,
       totalHours,
       utilisedHours,
-      nextLessonDate: parseDate(node.nextLesson?.datetime || "")
+      nextLessonDate: parseDate(node.nextLesson?.datetime || ""),
+      nextSubscriptionDate: parseDate(node.refill?.nextSubscription || ""),
+      billingFrequency: node.refill?.billingFrequency || ""
     };
   }
 
@@ -506,7 +515,7 @@
     return new Promise((resolve) => {
       chrome.storage.local.get(STUDENT_CACHE_KEY, (result) => {
         const cache = result?.[STUDENT_CACHE_KEY];
-        if (!cache || cache.version !== CACHE_VERSION || !Array.isArray(cache.students)) {
+        if (!cache || cache.version !== STUDENT_CACHE_VERSION || !Array.isArray(cache.students)) {
           resolve({ students: [], totalCount: 0, updatedAt: null });
           return;
         }
@@ -524,7 +533,7 @@
     return new Promise((resolve) => {
       chrome.storage.local.set({
         [STUDENT_CACHE_KEY]: {
-          version: CACHE_VERSION,
+          version: STUDENT_CACHE_VERSION,
           totalCount: result.totalCount || result.students?.length || 0,
           updatedAt: new Date().toISOString(),
           students: (result.students || []).map(serializeManagedStudent)
@@ -621,7 +630,8 @@
   function serializeManagedStudent(student) {
     return {
       ...student,
-      nextLessonDate: student.nextLessonDate ? student.nextLessonDate.toISOString() : null
+      nextLessonDate: student.nextLessonDate ? student.nextLessonDate.toISOString() : null,
+      nextSubscriptionDate: student.nextSubscriptionDate ? student.nextSubscriptionDate.toISOString() : null
     };
   }
 
@@ -632,7 +642,8 @@
 
     return {
       ...student,
-      nextLessonDate: student.nextLessonDate ? new Date(student.nextLessonDate) : null
+      nextLessonDate: student.nextLessonDate ? new Date(student.nextLessonDate) : null,
+      nextSubscriptionDate: student.nextSubscriptionDate ? new Date(student.nextSubscriptionDate) : null
     };
   }
 
@@ -792,7 +803,6 @@
     const students = rankStudents(allTime.transactions.length ? allTime.transactions : currentMonth.transactions);
     const activeStudentsForBenchmark = filterActiveStudents(students, managedStudentMap);
     const priceBenchmark = buildPriceBenchmark(activeStudentsForBenchmark);
-    const priceRecommendations = buildPriceRecommendations(activeStudentsForBenchmark);
     const monthlyBreakdown = buildMonthlyBreakdown(allTransactions);
     const avgWeeklyHours = calculateAverageWeeklyHours(allTime.hours, reportRange);
     const avgWeeklyLessons = calculateAverageWeeklyLessons(allTime.lessons, reportRange);
@@ -830,7 +840,6 @@
       topStudents: activeStudentsForBenchmark.slice(0, 10),
       managedStudents: studentResult.students || [],
       priceBenchmark,
-      priceRecommendations,
       monthlyBreakdown
     };
   }
@@ -1075,6 +1084,8 @@
           paidLessons: 0,
           currentPrice: 0,
           currentPriceDate: null,
+          firstPrice: 0,
+          firstPriceDate: null,
           firstLessonDate: null,
           lastLessonDate: null,
           lastPaidDate: null,
@@ -1103,6 +1114,10 @@
       }
       if (transaction.amount > 0 && transaction.lessonPrice > 0) {
         const transactionDate = transaction.date || new Date(0);
+        if (!item.firstPriceDate || transactionDate <= item.firstPriceDate) {
+          item.firstPrice = transaction.lessonPrice;
+          item.firstPriceDate = transactionDate;
+        }
         if (!item.currentPriceDate || transactionDate >= item.currentPriceDate) {
           item.currentPrice = transaction.lessonPrice;
           item.currentPriceDate = transactionDate;
@@ -1127,6 +1142,8 @@
           activeMonths,
           avgLessonsPerMonth: activeMonths ? lessons / activeMonths : lessons,
           currentPrice: item.currentPrice,
+          firstPrice: item.firstPrice,
+          priceAgeDays: item.currentPriceDate ? daysBetween(item.currentPriceDate, new Date()) : null,
           bookingRate: item.paidTransactions ? item.income / item.paidTransactions : 0,
           hourlyRate: hours ? item.income / hours : 0,
           lessonRate: item.paidLessons ? item.income / item.paidLessons : 0
@@ -1137,8 +1154,16 @@
 
   function buildPriceBenchmark(students) {
     const groups = new Map();
+    const pricedStudents = students.filter((student) => student.currentPrice > 0);
+    const medianPrice = median(pricedStudents.map((student) => student.currentPrice));
 
     for (const student of students) {
+      const recommendation = getPriceRecommendation(student, medianPrice);
+      const enrichedStudent = {
+        ...student,
+        recommendation,
+        priceStatus: getPriceStatus(student, recommendation, medianPrice)
+      };
       const key = student.currentPrice ? String(Math.round(student.currentPrice)) : "unbekannt";
       if (!groups.has(key)) {
         groups.set(key, {
@@ -1152,12 +1177,16 @@
           outstandingHours: 0,
           totalHours: 0,
           utilisedHours: 0,
-          recentLessons: 0
+          recentLessons: 0,
+          recommendationCount: 0,
+          urgentCount: 0,
+          endingSoonCount: 0,
+          maxPriority: 0
         });
       }
 
       const group = groups.get(key);
-      group.students.push(student);
+      group.students.push(enrichedStudent);
       group.income += student.income;
       group.lessons += student.lessons || student.transactions;
       group.paidLessons += student.paidLessons || 0;
@@ -1166,6 +1195,10 @@
       group.totalHours += student.totalHours || 0;
       group.utilisedHours += student.utilisedHours || 0;
       group.recentLessons += student.recentLessons;
+      group.recommendationCount += recommendation ? 1 : 0;
+      group.urgentCount += recommendation?.priority === 3 ? 1 : 0;
+      group.endingSoonCount += isSubscriptionEndingSoon(student) ? 1 : 0;
+      group.maxPriority = Math.max(group.maxPriority, recommendation?.priority || 0);
     }
 
     return [...groups.values()]
@@ -1174,7 +1207,8 @@
         students: group.students.sort((a, b) => a.student.localeCompare(b.student, "de")),
         avgEarning: group.paidLessons ? group.income / group.paidLessons : 0,
         studentCount: group.students.length,
-        avgLessonsPerStudent: group.students.length ? group.lessons / group.students.length : 0
+        avgLessonsPerStudent: group.students.length ? group.lessons / group.students.length : 0,
+        segmentStatus: summarizePriceSegment(group)
       }))
       .sort((a, b) => {
         if (!a.price) {
@@ -1209,7 +1243,7 @@
     return students
       .map((student) => {
         const managedStudent = managedStudentMap.get(normalizeStudentKey(student.student));
-        return managedStudent
+        return managedStudent && isCurrentManagedStudent(managedStudent)
           ? {
               ...student,
               managedStatus: managedStudent.status,
@@ -1218,11 +1252,30 @@
               outstandingHours: managedStudent.outstandingHours,
               totalHours: managedStudent.totalHours,
               utilisedHours: managedStudent.utilisedHours,
-              nextLessonDate: managedStudent.nextLessonDate
+              nextLessonDate: managedStudent.nextLessonDate,
+              nextSubscriptionDate: managedStudent.nextSubscriptionDate,
+              billingFrequency: managedStudent.billingFrequency
             }
           : null;
       })
       .filter(Boolean);
+  }
+
+  function isCurrentManagedStudent(student) {
+    const status = String(student.status || "").toUpperCase();
+    if (!status) {
+      return true;
+    }
+
+    if (/CANCEL|ARCHIV|INACTIVE|FINISHED|ENDED/.test(status)) {
+      return false;
+    }
+
+    if (status === "ACTIVE_SUBSCRIPTION" || status === "PACKAGE") {
+      return true;
+    }
+
+    return Boolean(student.hasHoursToScheduleLesson || student.nextLessonDate || student.hasBalanceData);
   }
 
   function normalizeStudentKey(value) {
@@ -1234,23 +1287,6 @@
       .trim();
   }
 
-  function buildPriceRecommendations(students) {
-    const pricedStudents = students.filter((student) => student.currentPrice > 0);
-    const medianPrice = median(pricedStudents.map((student) => student.currentPrice));
-
-    return pricedStudents
-      .map((student) => {
-        const recommendation = getPriceRecommendation(student, medianPrice);
-        return recommendation ? { ...student, ...recommendation } : null;
-      })
-      .filter(Boolean)
-      .sort((a, b) => {
-        const priorityDelta = b.priority - a.priority;
-        return priorityDelta || b.recentLessons - a.recentLessons || b.lessons - a.lessons;
-      })
-      .slice(0, 12);
-  }
-
   function getPriceRecommendation(student, medianPrice) {
     const lessons = student.lessons || student.transactions;
     const lowComparedToMedian = medianPrice && student.currentPrice <= medianPrice * 0.9;
@@ -1258,21 +1294,27 @@
     const highOutstandingBalance = student.outstandingHours >= 4;
     const steady = lessons >= 10 || student.avgLessonsPerMonth >= 4;
     const inactiveDays = student.lastPaidDate ? daysBetween(student.lastPaidDate, new Date()) : null;
+    const priceIsOld = student.priceAgeDays !== null && student.priceAgeDays >= 120;
+    const endingSoon = isSubscriptionEndingSoon(student);
 
-    if (student.currentPrice && (veryActive || highOutstandingBalance) && (lowComparedToMedian || lessons >= 12)) {
+    if (student.currentPrice && (veryActive || highOutstandingBalance || endingSoon) && (lowComparedToMedian || lessons >= 12 || priceIsOld)) {
       return {
         action: "Preiserhöhung besprechen",
         reason: lowComparedToMedian
           ? `hohe Auslastung/Reststunden und unter Medianpreis ${money(medianPrice)}`
-          : "hohe Auslastung oder viele offene Stunden",
+          : endingSoon
+            ? "Abo/Paket bald fällig und Preis prüfbar"
+            : "hohe Auslastung oder viele offene Stunden",
         priority: 3
       };
     }
 
-    if (student.currentPrice && steady && lowComparedToMedian) {
+    if (student.currentPrice && steady && (lowComparedToMedian || priceIsOld)) {
       return {
         action: "Preis prüfen",
-        reason: `stabile Zusammenarbeit unter Medianpreis ${money(medianPrice)}`,
+        reason: lowComparedToMedian
+          ? `stabile Zusammenarbeit unter Medianpreis ${money(medianPrice)}`
+          : `Preis seit ${student.priceAgeDays} Tagen unverändert`,
         priority: 2
       };
     }
@@ -1286,6 +1328,67 @@
     }
 
     return null;
+  }
+
+  function getPriceStatus(student, recommendation, medianPrice) {
+    if (recommendation) {
+      return recommendation;
+    }
+
+    if (student.currentPrice && medianPrice && student.currentPrice >= medianPrice * 1.1) {
+      return {
+        action: "starkes Segment",
+        reason: `über Medianpreis ${money(medianPrice)}`,
+        priority: 0
+      };
+    }
+
+    return {
+      action: "ok",
+      reason: "",
+      priority: 0
+    };
+  }
+
+  function summarizePriceSegment(group) {
+    if (group.urgentCount) {
+      return {
+        label: `${number(group.urgentCount)} dringend`,
+        detail: "Preiserhöhung zeitnah prüfen",
+        priority: 3
+      };
+    }
+
+    if (group.recommendationCount) {
+      return {
+        label: `${number(group.recommendationCount)} prüfen`,
+        detail: "Preis wirkt teilweise veraltet",
+        priority: 2
+      };
+    }
+
+    if (group.endingSoonCount) {
+      return {
+        label: `${number(group.endingSoonCount)} bald fällig`,
+        detail: "Abo/Paket läuft bald",
+        priority: 1
+      };
+    }
+
+    return {
+      label: "ok",
+      detail: "kein klarer Handlungsbedarf",
+      priority: 0
+    };
+  }
+
+  function isSubscriptionEndingSoon(student) {
+    if (!student.nextSubscriptionDate) {
+      return false;
+    }
+
+    const days = daysBetween(new Date(), student.nextSubscriptionDate);
+    return days >= 0 && days <= 14;
   }
 
   function median(values) {
@@ -1359,10 +1462,6 @@
       <div class="pp-panel pp-wide-panel">
         <h3>Preisvergleich aktiver Lernender</h3>
         ${renderPriceBenchmark(state.priceBenchmark)}
-      </div>
-      <div class="pp-panel pp-wide-panel">
-        <h3>Preis-Empfehlungen</h3>
-        ${renderPriceRecommendations(state.priceRecommendations)}
       </div>
       ${state.errors.length ? `<details class="pp-debug"><summary>Hinweise zur Datenerfassung</summary><pre>${escapeHtml(JSON.stringify(state.errors, null, 2))}</pre></details>` : ""}
     `;
@@ -1603,71 +1702,30 @@
     }
 
     return `
-      <table class="pp-table">
+      <table class="pp-table pp-price-table">
         <thead>
           <tr>
-            <th title="Lesson Price">Preis</th>
-            <th title="Earning, USD pro bezahlter Einheit">Ø Lohn</th>
+            <th title="Lesson Price">Preissegment</th>
+            <th>Status</th>
             <th>Lernende</th>
-            <th>Namen</th>
+            <th>Namen und Hinweise</th>
+            <th title="Earning, USD pro bezahlter Einheit">Ø Lohn</th>
             <th>Einheiten</th>
-            <th>Ø Einheiten</th>
             <th>Genutzt / Gesamt</th>
-            <th>Einnahmen</th>
-            <th>Letzte 30 Tage</th>
+            <th>Abo/Paket</th>
           </tr>
         </thead>
         <tbody>
           ${groups.map((group) => `
-            <tr>
+            <tr class="${group.maxPriority ? `pp-priority-row pp-priority-row-${group.maxPriority}` : ""}">
               <td>${escapeHtml(group.label)}</td>
-              <td>${rateOrNA(group.avgEarning)}</td>
+              <td>${renderSegmentStatus(group)}</td>
               <td>${number(group.studentCount)}</td>
               <td>${renderStudentChips(group.students)}</td>
+              <td>${rateOrNA(group.avgEarning)}</td>
               <td>${number(group.lessons)}</td>
-              <td>${number(group.avgLessonsPerStudent)}</td>
               <td>${formatBalance(group)}</td>
-              <td>${money(group.income)}</td>
-              <td>${number(group.recentLessons)}</td>
-            </tr>
-          `).join("")}
-        </tbody>
-      </table>
-    `;
-  }
-
-  function renderPriceRecommendations(recommendations) {
-    if (!recommendations.length) {
-      return `<p class="pp-empty">Keine klaren Preis-Hinweise gefunden. Das ist meist gut: entweder fehlen Lesson-Price-Daten oder die Preise wirken im geladenen Verlauf bereits konsistent.</p>`;
-    }
-
-    return `
-      <table class="pp-table">
-        <thead>
-          <tr>
-            <th>Lernende</th>
-            <th>Hinweis</th>
-            <th title="Lesson Price">Preis</th>
-            <th title="Earning, USD pro bezahlter Einheit">Lohn</th>
-            <th>Einheiten</th>
-            <th>Ø pro Monat</th>
-            <th>Genutzt / Gesamt</th>
-            <th>Letzte 30 Tage</th>
-            <th>Grund</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${recommendations.map((student) => `
-            <tr>
-              <td>${escapeHtml(student.student)}</td>
-              <td><span class="pp-badge pp-badge-${student.priority}">${escapeHtml(student.action)}</span></td>
-              <td>${money(student.currentPrice)}</td>
-              <td>${rateOrNA(student.lessonRate)}</td>
-              <td>${number(student.lessons || student.transactions)}</td>
-              <td>${number(student.avgLessonsPerMonth)}</td>
-              <td>${formatBalance(student)}</td>
-              <td>${number(student.recentLessons)}</td>
-              <td>${escapeHtml(student.reason)}</td>
+              <td>${formatEndingSoon(group)}</td>
             </tr>
           `).join("")}
         </tbody>
@@ -1680,11 +1738,11 @@
     const visibleStudents = sortedStudents.slice(0, 8);
     const hiddenCount = students.length - visibleStudents.length;
     const chips = visibleStudents
-      .map((student) => `<span class="pp-chip">${escapeHtml(student.student)}</span>`)
+      .map(renderStudentChip)
       .join("");
     const hiddenChips = sortedStudents
       .slice(8)
-      .map((student) => `<span class="pp-chip">${escapeHtml(student.student)}</span>`)
+      .map(renderStudentChip)
       .join("");
 
     return `
@@ -1700,12 +1758,56 @@
     `;
   }
 
+  function renderStudentChip(student) {
+    const priority = student.recommendation?.priority || 0;
+    const titleParts = [
+      student.student,
+      student.currentPrice ? `Preis: ${money(student.currentPrice)}` : "",
+      student.firstPrice && student.firstPrice !== student.currentPrice ? `Erstpreis: ${money(student.firstPrice)}` : "",
+      student.priceAgeDays !== null ? `Preis seit ${student.priceAgeDays} Tagen` : "",
+      student.priceStatus?.action,
+      student.priceStatus?.reason,
+      student.nextSubscriptionDate ? `Abo: ${formatShortDate(student.nextSubscriptionDate)}` : ""
+    ].filter(Boolean);
+
+    return `<span class="pp-chip pp-chip-priority-${priority}" title="${escapeHtml(titleParts.join(" - "))}">${escapeHtml(student.student)}</span>`;
+  }
+
+  function renderSegmentStatus(group) {
+    const priority = group.segmentStatus?.priority || 0;
+    return `
+      <span class="pp-badge pp-badge-${priority}">${escapeHtml(group.segmentStatus?.label || "ok")}</span>
+      <small class="pp-muted">${escapeHtml(group.segmentStatus?.detail || "")}</small>
+    `;
+  }
+
+  function formatEndingSoon(group) {
+    const dates = group.students
+      .map((student) => student.nextSubscriptionDate)
+      .filter(Boolean)
+      .sort((a, b) => a - b);
+
+    if (!dates.length) {
+      return "n/a";
+    }
+
+    return `${group.endingSoonCount ? `${number(group.endingSoonCount)} bald · ` : ""}${formatShortDate(dates[0])}`;
+  }
+
   function formatBalance(item) {
     if (!item?.hasBalanceData) {
       return "n/a";
     }
 
     return `${number(item.utilisedHours)} / ${number(item.totalHours)}`;
+  }
+
+  function formatShortDate(date) {
+    if (!date || Number.isNaN(date.getTime())) {
+      return "n/a";
+    }
+
+    return dateFormatter.format(date);
   }
 
   function formatStudentSource(source) {

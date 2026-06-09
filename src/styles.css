@@ -229,6 +229,40 @@
   white-space: normal;
 }
 
+.pp-price-table {
+  table-layout: fixed;
+}
+
+.pp-price-table th:nth-child(1),
+.pp-price-table td:nth-child(1) {
+  width: 100px;
+}
+
+.pp-price-table th:nth-child(2),
+.pp-price-table td:nth-child(2) {
+  width: 150px;
+}
+
+.pp-price-table th:nth-child(3),
+.pp-price-table td:nth-child(3) {
+  width: 78px;
+}
+
+.pp-price-table th:nth-child(5),
+.pp-price-table td:nth-child(5),
+.pp-price-table th:nth-child(6),
+.pp-price-table td:nth-child(6),
+.pp-price-table th:nth-child(7),
+.pp-price-table td:nth-child(7),
+.pp-price-table th:nth-child(8),
+.pp-price-table td:nth-child(8) {
+  width: 112px;
+}
+
+.pp-price-table td:nth-child(4) {
+  white-space: normal;
+}
+
 .pp-month-table th,
 .pp-month-table td {
   text-align: right;
@@ -247,13 +281,16 @@
 
 .pp-chip-list {
   display: flex;
-  max-width: 440px;
+  width: 100%;
+  min-width: 0;
   flex-wrap: wrap;
   gap: 4px;
+  align-items: flex-start;
 }
 
 .pp-chip-details {
-  display: contents;
+  display: inline-flex;
+  min-width: 0;
 }
 
 .pp-chip-details summary {
@@ -270,8 +307,11 @@
 }
 
 .pp-chip-list-extra {
-  display: contents;
-  max-width: none;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .pp-chip,
@@ -279,10 +319,11 @@
   display: inline-flex;
   align-items: center;
   min-height: 24px;
+  max-width: 100%;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 650;
-  line-height: 1;
+  line-height: 1.2;
   white-space: nowrap;
 }
 
@@ -290,6 +331,23 @@
   padding: 4px 8px;
   background: #e8f2ff;
   color: #0f4f8f;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pp-chip-priority-3 {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.pp-chip-priority-2 {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.pp-chip-priority-1 {
+  background: #ffedd5;
+  color: #9a3412;
 }
 
 .pp-badge {
@@ -299,8 +357,8 @@
 }
 
 .pp-badge-3 {
-  background: #dcfce7;
-  color: #166534;
+  background: #fee2e2;
+  color: #991b1b;
 }
 
 .pp-badge-2 {
@@ -309,8 +367,29 @@
 }
 
 .pp-badge-1 {
-  background: #fee2e2;
-  color: #991b1b;
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+.pp-badge-0 {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.pp-priority-row-3 td {
+  background: #fff7f7;
+}
+
+.pp-priority-row-2 td {
+  background: #fffbeb;
+}
+
+.pp-muted {
+  display: block;
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.3;
 }
 
 .pp-insights {

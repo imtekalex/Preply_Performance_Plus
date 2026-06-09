@@ -39,11 +39,11 @@ The panel always shows an update timestamp in German, for example:
 - Active students and total students
 - Average weekly hours when the CSV includes an actual duration column
 - Average units pro month
-- Top 10 active-student ranking by income, units, used/total balance, current price, tutor wage, and hourly rate when the CSV includes the required columns
-- Price benchmarking for currently active students by current student price, including tutor wage, used/total balance, and which students are billed at each price point
-- Price recommendation hints based on current price, total units, remaining balance, recent 30-day units, average units pro month, and the median student price
+- Top 10 currently active-student ranking by income, units, used/total balance, current price, tutor wage, and hourly rate when the CSV includes the required columns
+- Price benchmarking for currently active students by current student price, including tutor wage, used/total balance, subscription timing, names per price segment, and integrated price-review hints
+- Price review hints based on current price, price age, total units, remaining balance, recent 30-day units, average units pro month, subscription timing, and the median student price
 
-Price recommendation hints are intentionally conservative. They infer possible price conversations from CSV history plus Preply's current-student balance data when available; they do not know your real availability, message demand, student context, or relationship quality.
+Price review hints are intentionally conservative. They infer possible price conversations from CSV history plus Preply's current-student balance and subscription data when available; they do not know your real availability, message demand, student context, or relationship quality.
 
 ## Next data check
 
