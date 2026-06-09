@@ -8,7 +8,7 @@
   const CACHE_KEY = "preplyPlusTransactionCache";
   const CACHE_VERSION = 2;
   const DEFAULT_HISTORY_START = "2000-01-01";
-  const STUDENT_PAGE_SIZE = 50;
+  const STUDENT_PAGE_SIZE = 20;
   const STUDENT_MANAGEMENT_QUERY = `query TutorStudentManagement($offset: Int!, $count: Int!, $archivedByTutor: Boolean, $orderField: TutoringSortFieldsEnum!, $orderDirection: CommonSortDirectionsEnum!, $includeOngoing: Boolean!, $clientName: String, $statuses: [TutoringStatusEnum!], $smartFilter: TutoringSmartFilter) {
   currentUser {
     id
