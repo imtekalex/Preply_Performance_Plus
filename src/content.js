@@ -1347,19 +1347,19 @@
       return recommendation;
     }
 
+    if (student.currentPrice && benchmarkPrice && student.currentPrice >= benchmarkPrice * 0.95) {
+      return {
+        action: "stark",
+        reason: `nah am Zielpreis ${rateMoney(benchmarkPrice)}`,
+        priority: 0
+      };
+    }
+
     if (isSubscriptionEndingSoon(student)) {
       return {
         action: "bald fällig",
         reason: "Abo/Paket endet in den nächsten 14 Tagen",
         priority: 1
-      };
-    }
-
-    if (student.currentPrice && benchmarkPrice && student.currentPrice >= benchmarkPrice * 0.95) {
-      return {
-        action: "stark",
-        reason: `nah am Benchmark ${rateMoney(benchmarkPrice)}`,
-        priority: 0
       };
     }
 
