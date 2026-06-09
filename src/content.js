@@ -1722,6 +1722,17 @@
               <span>${formatBalance(group)}</span>
             </summary>
             <table class="pp-price-detail-table">
+              <thead>
+                <tr>
+                  <th>Lernende</th>
+                  <th>Preis</th>
+                  <th>Lohn</th>
+                  <th>Status</th>
+                  <th>Einnahmen</th>
+                  <th>Einheiten</th>
+                  <th>Abo-Einheiten</th>
+                </tr>
+              </thead>
               <tbody>
                 ${group.students.map(renderPriceStudentRow).join("")}
               </tbody>
@@ -1736,6 +1747,8 @@
     return `
       <tr class="${student.priceStatus?.priority ? `pp-priority-row pp-priority-row-${student.priceStatus.priority}` : ""}">
         <td>${renderStudentNameWithMeta(student)}</td>
+        <td>${rateOrNA(student.currentPrice)}</td>
+        <td>${rateOrNA(student.lessonRate)}</td>
         <td>${renderStudentPriceStatus(student)}</td>
         <td>${money(student.income)}</td>
         <td>${number(student.lessons || student.transactions)}</td>

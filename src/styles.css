@@ -255,6 +255,7 @@
 
 .pp-price-group-row > td {
   background: #f8fafc;
+  vertical-align: top;
 }
 
 .pp-price-group {
@@ -282,29 +283,44 @@
   table-layout: fixed;
 }
 
+.pp-price-detail-table th,
 .pp-price-detail-table td {
   padding: 8px;
   border-top: 1px solid #e2e8f0;
   border-bottom: 0;
+  text-align: left;
   vertical-align: top;
 }
 
+.pp-price-detail-table th {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
 .pp-price-detail-table td:nth-child(1) {
-  width: 24%;
+  width: 20%;
 }
 
-.pp-price-detail-table td:nth-child(2) {
-  width: 28%;
-}
-
-.pp-price-detail-table td:nth-child(3),
-.pp-price-detail-table td:nth-child(4) {
-  width: 14%;
+.pp-price-detail-table td:nth-child(2),
+.pp-price-detail-table td:nth-child(3) {
+  width: 11%;
   white-space: nowrap;
 }
 
-.pp-price-detail-table td:nth-child(5) {
-  width: 20%;
+.pp-price-detail-table td:nth-child(4) {
+  width: 24%;
+}
+
+.pp-price-detail-table td:nth-child(5),
+.pp-price-detail-table td:nth-child(6) {
+  width: 11%;
+  white-space: nowrap;
+}
+
+.pp-price-detail-table td:nth-child(7) {
+  width: 12%;
 }
 
 .pp-month-table th,
