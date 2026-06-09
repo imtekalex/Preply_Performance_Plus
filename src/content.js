@@ -74,6 +74,12 @@
     maximumFractionDigits: 0
   });
 
+  const rateFormatter = new Intl.NumberFormat("de-DE", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2
+  });
+
   const numberFormatter = new Intl.NumberFormat("de-DE", {
     maximumFractionDigits: 1
   });
@@ -1168,11 +1174,11 @@
       });
 
     for (const student of enrichedStudents) {
-      const key = student.currentPrice ? String(Math.round(student.currentPrice)) : "unbekannt";
+      const key = student.currentPrice ? String(Math.round(student.currentPrice * 100)) : "unbekannt";
       if (!groups.has(key)) {
         groups.set(key, {
           price: student.currentPrice || 0,
-          label: student.currentPrice ? money(student.currentPrice) : "unbekannt",
+          label: student.currentPrice ? rateMoney(student.currentPrice) : "unbekannt",
           students: [],
           income: 0,
           lessons: 0,
@@ -1793,8 +1799,8 @@
   function buildStudentPriceTitle(student) {
     return [
       student.student,
-      student.currentPrice ? `Preis: ${money(student.currentPrice)}` : "",
-      student.firstPrice && student.firstPrice !== student.currentPrice ? `Erstpreis: ${money(student.firstPrice)}` : "",
+      student.currentPrice ? `Preis: ${rateMoney(student.currentPrice)}` : "",
+      student.firstPrice && student.firstPrice !== student.currentPrice ? `Erstpreis: ${rateMoney(student.firstPrice)}` : "",
       student.priceAgeDays !== null ? `Preis seit ${student.priceAgeDays} Tagen` : "",
       student.priceStatus?.action,
       student.priceStatus?.reason,
@@ -1977,8 +1983,12 @@
     return moneyFormatter.format(value || 0);
   }
 
+  function rateMoney(value) {
+    return rateFormatter.format(value || 0);
+  }
+
   function rateOrNA(value) {
-    return value ? money(value) : "n/a";
+    return value ? rateMoney(value) : "n/a";
   }
 
   function number(value) {
