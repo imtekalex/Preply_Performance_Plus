@@ -41,18 +41,19 @@ The panel always shows an update timestamp in German, for example:
 - Average units pro month
 - Top 10 currently active-student ranking by income, paid units, subscription/package progress, current price, tutor wage, and hourly rate when the CSV includes the required columns
 - Price benchmarking for currently active students grouped by price with expandable learner rows, including tutor wage, income, paid units, subscription/package progress, subscription timing, and integrated price-review hints
-- Price review hints based on current price, price age, total units, remaining balance, recent 30-day units, average units pro month, subscription timing, and the median student price
+- Price review hints based on current price, price age, price gap to the upper active-student benchmark, total units, remaining balance, recent 30-day units, average units pro month, subscription timing, and the median student price
 
 Price review hints are intentionally conservative. They infer possible price conversations from CSV history plus Preply's current-student balance and subscription data when available; they do not know your real availability, message demand, student context, or relationship quality.
 
 The price-review signal currently combines:
 
-- price below the active-student median (`<= 90%`, or `<= 80%` for very low)
+- price gap to the upper active-student benchmark, currently the 75th percentile of active learner prices (`<= 90%`, or `<= 80%` for very low)
+- price below the active-student median as an additional conservative signal
 - demand/usage pressure: at least 8 paid units in the last 30 days, at least 8 average units per active month, or at least 4 remaining subscription/package units
 - timing: subscription/package renewal within 14 days
 - price age: current price unchanged for at least 120 days, or 180 days for stronger urgency
 
-`Preiserhöhung besprechen` appears only when a low price combines with usage pressure, renewal timing, or a very old price. `Preis prüfen` is a softer hint for stable learners with a below-median or old price. `bald fällig` only marks renewal timing and is not by itself a price problem.
+`Preiserhöhung besprechen` appears only when a meaningful price gap combines with usage pressure, renewal timing, or a very old price. `Preis prüfen` is a softer hint for stable learners with a below-benchmark, below-median, or old price. `bald fällig` only marks renewal timing and is not by itself a price problem.
 
 ## Next data check
 
