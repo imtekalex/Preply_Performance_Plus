@@ -53,7 +53,7 @@ The price-review signal currently combines:
 - timing: subscription/package renewal within 14 days
 - price age: current price unchanged for at least 120 days, or 180 days for stronger urgency
 
-`Preiserhöhung besprechen` appears only when a meaningful price gap combines with usage pressure, renewal timing, or a very old price. `Preis prüfen` is a softer hint for stable learners with a below-benchmark, below-median, or old price. `bald fällig` only marks renewal timing and is not by itself a price problem.
+The long-term goal can be to bring active learners toward the current target price, but the color/status is about urgency rather than merely being below target. `unter Zielpreis` marks a learner below the benchmark without strong urgency. `Preiserhöhung besprechen` appears only when a strong price gap combines with usage pressure, renewal timing, or an old price. `Preis prüfen` is a softer hint for stable learners with a below-benchmark, below-median, or old price. `bald fällig` only marks renewal timing and is not by itself a price problem.
 
 ## Next data check
 

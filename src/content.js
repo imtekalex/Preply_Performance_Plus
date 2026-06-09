@@ -1297,31 +1297,27 @@
     const veryLowComparedToMedian = medianPrice && student.currentPrice <= medianPrice * 0.8;
     const lowComparedToBenchmark = benchmarkPrice && student.currentPrice <= benchmarkPrice * 0.9;
     const veryLowComparedToBenchmark = benchmarkPrice && student.currentPrice <= benchmarkPrice * 0.8;
+    const belowBenchmark = benchmarkPrice && student.currentPrice < benchmarkPrice * 0.95;
     const veryActive = student.recentLessons >= 8 || student.avgLessonsPerMonth >= 8;
     const highOutstandingBalance = student.outstandingHours >= 4;
     const steady = lessons >= 10 || student.avgLessonsPerMonth >= 4;
     const inactiveDays = student.lastPaidDate ? daysBetween(student.lastPaidDate, new Date()) : null;
     const priceIsOld = student.priceAgeDays !== null && student.priceAgeDays >= 120;
-    const priceIsVeryOld = student.priceAgeDays !== null && student.priceAgeDays >= 180;
     const endingSoon = isSubscriptionEndingSoon(student);
 
-    if (student.currentPrice && (veryLowComparedToBenchmark || lowComparedToMedian) && (veryActive || highOutstandingBalance || endingSoon || priceIsVeryOld)) {
+    if (student.currentPrice && veryLowComparedToBenchmark && (veryActive || highOutstandingBalance || endingSoon || priceIsOld)) {
       return {
         action: "Preiserhöhung besprechen",
-        reason: lowComparedToBenchmark
-          ? `hohe Auslastung/Reststunden und ${formatPriceGap(student.currentPrice, benchmarkPrice)} unter Benchmark ${rateMoney(benchmarkPrice)}`
-          : endingSoon
-            ? "Abo/Paket bald fällig und Preis prüfbar"
-            : "hohe Auslastung oder viele offene Stunden",
+        reason: `${formatPriceGap(student.currentPrice, benchmarkPrice)} unter Zielpreis ${rateMoney(benchmarkPrice)} plus Gesprächsanlass`,
         priority: 3
       };
     }
 
-    if (student.currentPrice && steady && (lowComparedToBenchmark || lowComparedToMedian || priceIsOld)) {
+    if (student.currentPrice && belowBenchmark && (lowComparedToBenchmark || lowComparedToMedian) && (steady || endingSoon || priceIsOld)) {
       return {
         action: "Preis prüfen",
         reason: lowComparedToBenchmark
-          ? `stabile Zusammenarbeit ${formatPriceGap(student.currentPrice, benchmarkPrice)} unter Benchmark ${rateMoney(benchmarkPrice)}`
+          ? `stabile Zusammenarbeit ${formatPriceGap(student.currentPrice, benchmarkPrice)} unter Zielpreis ${rateMoney(benchmarkPrice)}`
           : `Preis seit ${student.priceAgeDays} Tagen unverändert`,
         priority: 2
       };
@@ -1331,6 +1327,14 @@
       return {
         action: "Zusammenarbeit prüfen",
         reason: `${inactiveDays} Tage ohne bezahlte Einheit bei niedrigem Preis`,
+        priority: 1
+      };
+    }
+
+    if (student.currentPrice && belowBenchmark) {
+      return {
+        action: "unter Zielpreis",
+        reason: `${formatPriceGap(student.currentPrice, benchmarkPrice)} unter Zielpreis ${rateMoney(benchmarkPrice)}`,
         priority: 1
       };
     }
@@ -1846,7 +1850,11 @@
       return { label: "prüfen", priority: 2 };
     }
 
-    if (group.maxPriority === 1) {
+    if (group.students.some((student) => student.priceStatus?.action === "unter Zielpreis")) {
+      return { label: "unter Zielpreis", priority: 1 };
+    }
+
+    if (group.students.some((student) => student.priceStatus?.action === "bald fällig")) {
       return { label: "bald fällig", priority: 1 };
     }
 
