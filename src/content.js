@@ -1308,7 +1308,7 @@
     if (student.currentPrice && veryLowComparedToBenchmark && (veryActive || highOutstandingBalance || endingSoon || priceIsOld)) {
       return {
         action: "Preiserhöhung besprechen",
-        reason: `${formatPriceGap(student.currentPrice, benchmarkPrice)} unter Zielpreis ${rateMoney(benchmarkPrice)} plus Gesprächsanlass`,
+        reason: `${formatPriceGap(student.currentPrice, benchmarkPrice)} unter Zielpreis ${rateMoney(benchmarkPrice)} plus hohe Nutzung, offene Einheiten, baldige Verlängerung oder alter Preis`,
         priority: 3
       };
     }
@@ -1737,7 +1737,6 @@
             <th>Status</th>
             <th>Einnahmen</th>
             <th>Bezahlte Einheiten</th>
-            <th>Abo-Einheiten</th>
           </tr>
         </thead>
         <tbody>
@@ -1758,16 +1757,13 @@
         <td>${renderGroupPriceStatus(group)}</td>
         <td>${money(group.income)}</td>
         <td>${number(group.lessons)} Einheiten</td>
-        <td>${formatBalance(group)}</td>
       </tr>
       <tr class="pp-price-detail-row ${isOpen ? "" : "pp-hidden"}" data-pp-group-details="${groupId}">
-        <td colspan="7">
+        <td colspan="6">
           <table class="pp-price-detail-table">
             <thead>
               <tr>
                 <th>Lernende</th>
-                <th>Preis</th>
-                <th>Lohn</th>
                 <th>Status</th>
                 <th>Einnahmen</th>
                 <th>Einheiten</th>
@@ -1811,8 +1807,6 @@
     return `
       <tr class="${student.priceStatus?.priority ? `pp-priority-row pp-priority-row-${student.priceStatus.priority}` : ""}">
         <td>${renderStudentNameWithMeta(student)}</td>
-        <td>${rateOrNA(student.currentPrice)}</td>
-        <td>${rateOrNA(student.lessonRate)}</td>
         <td>${renderStudentPriceStatus(student)}</td>
         <td>${money(student.income)}</td>
         <td>${number(student.lessons || student.transactions)}</td>
