@@ -843,7 +843,7 @@
         lifetimeStudents: visible.lifetimeStudents || allTime.students,
         totalStudents: allTime.students || visible.lifetimeStudents
       },
-      topStudents: activeStudentsForBenchmark.slice(0, 10),
+      topStudents: activeStudentsForBenchmark,
       managedStudents: studentResult.students || [],
       priceBenchmark,
       monthlyBreakdown
@@ -1697,29 +1697,45 @@
             <th>Rang</th>
             <th>Lernende</th>
             <th>Einnahmen</th>
-            <th>Bezahlte Einheiten</th>
-            <th>Abo-Einheiten</th>
+            <th>Einheiten</th>
+            <th>Abo</th>
             ${hasHours ? "<th>Stunden</th><th>Ø pro Stunde</th>" : ""}
             <th title="Lesson Price">Preis</th>
             <th title="Earning, USD pro bezahlter Einheit">Lohn</th>
           </tr>
         </thead>
         <tbody>
-          ${students.map((student, index) => `
+          ${renderStudentRows(students.slice(0, 5), hasHours)}
+          ${students.length > 5 ? `
             <tr>
-              <td>${index + 1}</td>
-              <td>${escapeHtml(student.student)}</td>
-              <td>${money(student.income)}</td>
-              <td>${number(student.lessons || student.transactions)}</td>
-              <td>${renderBalanceProgress(student)}</td>
-              ${hasHours ? `<td>${number(student.hours)}</td><td>${rateOrNA(student.hourlyRate)}</td>` : ""}
-              <td>${rateOrNA(student.currentPrice)}</td>
-              <td>${rateOrNA(student.lessonRate)}</td>
+              <td colspan="${hasHours ? 9 : 7}">
+                <details class="pp-ranking-details">
+                  <summary>${number(students.length - 5)} weitere Lernende anzeigen</summary>
+                  <table class="pp-table pp-ranking-extra-table">
+                    <tbody>${renderStudentRows(students.slice(5), hasHours, 5)}</tbody>
+                  </table>
+                </details>
+              </td>
             </tr>
-          `).join("")}
+          ` : ""}
         </tbody>
       </table>
     `;
+  }
+
+  function renderStudentRows(students, hasHours, offset = 0) {
+    return students.map((student, index) => `
+      <tr>
+        <td>${offset + index + 1}</td>
+        <td>${escapeHtml(student.student)}</td>
+        <td>${money(student.income)}</td>
+        <td>${number(student.lessons || student.transactions)}</td>
+        <td>${renderBalanceProgress(student)}</td>
+        ${hasHours ? `<td>${number(student.hours)}</td><td>${rateOrNA(student.hourlyRate)}</td>` : ""}
+        <td>${rateOrNA(student.currentPrice)}</td>
+        <td>${rateOrNA(student.lessonRate)}</td>
+      </tr>
+    `).join("");
   }
 
   function renderPriceBenchmark(groups) {
@@ -1736,7 +1752,7 @@
             <th>Details</th>
             <th>Status</th>
             <th>Einnahmen</th>
-            <th>Bezahlte Einheiten</th>
+            <th>Einheiten</th>
           </tr>
         </thead>
         <tbody>
@@ -1767,7 +1783,7 @@
                 <th>Status</th>
                 <th>Einnahmen</th>
                 <th>Einheiten</th>
-                <th>Abo-Einheiten</th>
+                <th>Abo</th>
               </tr>
             </thead>
             <tbody>
