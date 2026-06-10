@@ -36,6 +36,7 @@
 .pp-status,
 .pp-card small,
 .pp-insight small,
+.pp-section-note,
 .pp-empty {
   color: #5f6b7a;
   font-size: 13px;
@@ -45,6 +46,10 @@
 .pp-header p,
 .pp-status {
   margin: 0;
+}
+
+.pp-section-note {
+  margin: -4px 0 12px;
 }
 
 .pp-actions {
@@ -245,7 +250,22 @@
 
 .pp-price-table th:nth-child(3),
 .pp-price-table td:nth-child(3) {
-  width: auto;
+  width: 140px;
+}
+
+.pp-price-table th:nth-child(4),
+.pp-price-table td:nth-child(4) {
+  width: 140px;
+}
+
+.pp-price-table th:nth-child(5),
+.pp-price-table td:nth-child(5) {
+  width: 120px;
+}
+
+.pp-price-table th:nth-child(6),
+.pp-price-table td:nth-child(6) {
+  width: 130px;
 }
 
 .pp-price-table td:nth-child(3),
@@ -319,26 +339,31 @@
   text-transform: uppercase;
 }
 
+.pp-price-detail-table th:nth-child(1),
 .pp-price-detail-table td:nth-child(1) {
-  width: 28%;
+  width: 35%;
 }
 
+.pp-price-detail-table th:nth-child(2),
 .pp-price-detail-table td:nth-child(2) {
   width: 13%;
   white-space: nowrap;
 }
 
+.pp-price-detail-table th:nth-child(3),
 .pp-price-detail-table td:nth-child(3) {
   width: 14%;
   white-space: nowrap;
 }
 
+.pp-price-detail-table th:nth-child(4),
 .pp-price-detail-table td:nth-child(4) {
-  width: 36%;
+  width: 18%;
 }
 
+.pp-price-detail-table th:nth-child(5),
 .pp-price-detail-table td:nth-child(5) {
-  width: 9%;
+  width: 20%;
 }
 
 .pp-ranking-toggle {

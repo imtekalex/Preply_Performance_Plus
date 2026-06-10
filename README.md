@@ -40,20 +40,17 @@ The panel always shows an update timestamp in German, for example:
 - Average weekly hours when the CSV includes an actual duration column
 - Average units pro month
 - Top 5 currently active-student ranking by income, with expandable full ranking, paid units, subscription/package progress, current price, tutor wage, and hourly rate when the CSV includes the required columns
-- Price benchmarking for currently active students grouped by price with expandable learner rows, including tutor wage, income, paid units, subscription/package progress, subscription timing, and integrated price-review hints
-- Price review hints based on current price, price age, price gap to the upper active-student benchmark, total units, remaining balance, recent 30-day units, average units pro month, subscription timing, and the median student price
+- Price benchmarking for currently active students grouped by price with expandable learner rows, including tutor wage, income, paid units, subscription/package progress, and simple price-gap status
+- Price review hints based on the gap between each learner's current CSV lesson price and the current Preply `Preis pro UE`
 
-Price review hints are intentionally conservative. They infer possible price conversations from CSV history plus Preply's current-student balance and subscription data when available; they do not know your real availability, message demand, student context, or relationship quality.
+Price review hints compare each active learner's CSV `Lesson Price` with the current `Preis pro UE` shown on the Preply performance page (`data-qa-id="success-driver-price_per_lesson"`). They do not infer demand, relationship quality, or negotiation timing.
 
-The price-review signal currently combines:
+The status is intentionally simple:
 
-- price gap to the upper active-student benchmark, currently the 75th percentile of active learner prices (`<= 90%`, or `<= 80%` for very low)
-- price below the active-student median as an additional conservative signal
-- demand/usage pressure: at least 8 paid units in the last 30 days, at least 8 average units per active month, or at least 4 remaining subscription/package units
-- timing: subscription/package renewal within 14 days
-- price age: current price unchanged for at least 120 days, or 180 days for stronger urgency
-
-The long-term goal can be to bring active learners toward the current target price, but the color/status is about urgency rather than merely being below target. `unter Zielpreis` marks a learner below the benchmark without strong urgency. `Preiserhöhung besprechen` appears only when a strong price gap combines with concrete triggers: high recent usage, many remaining subscription/package units, renewal timing, or an old price. `Preis prüfen` is a softer hint for stable learners with a below-benchmark, below-median, or old price. `bald fällig` only marks renewal timing and is not by itself a price problem.
+- `ok`: current learner price is at least 90% of the current Preply price
+- `prüfen`: current learner price is more than 10% below the current Preply price
+- `dringend`: current learner price is more than 20% below the current Preply price
+- `unbekannt`: the current Preply price or the learner's CSV price is missing
 
 ## Next data check
 

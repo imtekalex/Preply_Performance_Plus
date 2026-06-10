@@ -708,6 +708,7 @@
       activeStudents: parseNumber(primaryMetricText('[data-qa-id="overview-chip-activeStudents"]')),
       newStudents: parseNumber(primaryMetricText('[data-qa-id="overview-chip-newStudents"]')),
       chartEarnings: parseMoney(textOf('[data-qa-id="earnings-amount"]')),
+      currentLessonPrice: parseMoney(primaryMetricText('[data-qa-id="success-driver-price_per_lesson"]')),
       totalEarnings: parseMoney(primaryMetricText('[data-qa-id="lifetime-performance-total-earnings"]')),
       lifetimeLessons: parseNumber(primaryMetricText('[data-qa-id="lifetime-performance-lessons-taught"]')),
       lifetimeHours: parseNumber(primaryMetricText('[data-qa-id="lifetime-performance-hours-taught"]')),
@@ -808,7 +809,7 @@
     const avgHourlyRate = monthlyHours ? monthlyIncome / monthlyHours : 0;
     const students = rankStudents(allTime.transactions.length ? allTime.transactions : currentMonth.transactions);
     const activeStudentsForBenchmark = filterActiveStudents(students, managedStudentMap);
-    const priceBenchmark = buildPriceBenchmark(activeStudentsForBenchmark);
+    const priceBenchmark = buildPriceBenchmark(activeStudentsForBenchmark, visible.currentLessonPrice);
     const monthlyBreakdown = buildMonthlyBreakdown(allTransactions);
     const avgWeeklyHours = calculateAverageWeeklyHours(allTime.hours, reportRange);
     const avgWeeklyLessons = calculateAverageWeeklyLessons(allTime.lessons, reportRange);
@@ -1158,22 +1159,19 @@
       .sort((a, b) => b.income - a.income);
   }
 
-  function buildPriceBenchmark(students) {
-    const pricedStudents = students.filter((student) => student.currentPrice > 0);
-    const prices = pricedStudents.map((student) => student.currentPrice);
-    const medianPrice = median(prices);
-    const benchmarkPrice = percentile(prices, 0.75) || medianPrice;
+  function buildPriceBenchmark(students, targetPrice = 0) {
+    const normalizedTargetPrice = Number(targetPrice) || 0;
     const groups = new Map();
 
     const enrichedStudents = students
       .map((student) => {
-        const recommendation = getPriceRecommendation(student, medianPrice, benchmarkPrice);
+        const priceStatus = getPriceStatus(student, normalizedTargetPrice);
         return {
           ...student,
-          recommendation,
-          priceBenchmark: benchmarkPrice,
-          priceGapPercent: calculatePriceGapPercent(student.currentPrice, benchmarkPrice),
-          priceStatus: getPriceStatus(student, recommendation, medianPrice, benchmarkPrice)
+          targetPrice: normalizedTargetPrice,
+          priceGap: calculatePriceGap(student.currentPrice, normalizedTargetPrice),
+          priceGapPercent: calculatePriceGapPercent(student.currentPrice, normalizedTargetPrice),
+          priceStatus
         };
       });
 
@@ -1310,130 +1308,65 @@
       .trim();
   }
 
-  function getPriceRecommendation(student, medianPrice, benchmarkPrice) {
-    const lessons = student.lessons || student.transactions;
-    const lowComparedToMedian = medianPrice && student.currentPrice <= medianPrice * 0.9;
-    const veryLowComparedToMedian = medianPrice && student.currentPrice <= medianPrice * 0.8;
-    const lowComparedToBenchmark = benchmarkPrice && student.currentPrice <= benchmarkPrice * 0.9;
-    const veryLowComparedToBenchmark = benchmarkPrice && student.currentPrice <= benchmarkPrice * 0.8;
-    const belowBenchmark = benchmarkPrice && student.currentPrice < benchmarkPrice * 0.95;
-    const veryActive = student.recentLessons >= 8 || student.avgLessonsPerMonth >= 8;
-    const highOutstandingBalance = student.outstandingHours >= 4;
-    const steady = lessons >= 10 || student.avgLessonsPerMonth >= 4;
-    const inactiveDays = student.lastPaidDate ? daysBetween(student.lastPaidDate, new Date()) : null;
-    const priceIsOld = student.priceAgeDays !== null && student.priceAgeDays >= 120;
-    const endingSoon = isSubscriptionEndingSoon(student);
-
-    if (student.currentPrice && veryLowComparedToBenchmark && (veryActive || highOutstandingBalance || endingSoon || priceIsOld)) {
+  function getPriceStatus(student, targetPrice) {
+    if (!targetPrice) {
       return {
-        action: "Preiserhöhung besprechen",
-        reason: `${formatPriceGap(student.currentPrice, benchmarkPrice)} unter Zielpreis ${rateMoney(benchmarkPrice)} plus hohe Nutzung, offene Einheiten, baldige Verlängerung oder alter Preis`,
-        priority: 3
-      };
-    }
-
-    if (student.currentPrice && belowBenchmark && (lowComparedToBenchmark || lowComparedToMedian) && (steady || endingSoon || priceIsOld)) {
-      return {
-        action: "Preis prüfen",
-        reason: lowComparedToBenchmark
-          ? `stabile Zusammenarbeit ${formatPriceGap(student.currentPrice, benchmarkPrice)} unter Zielpreis ${rateMoney(benchmarkPrice)}`
-          : `Preis seit ${student.priceAgeDays} Tagen unverändert`,
-        priority: 2
-      };
-    }
-
-    if (student.currentPrice && (veryLowComparedToBenchmark || veryLowComparedToMedian) && inactiveDays !== null && inactiveDays > 90) {
-      return {
-        action: "Zusammenarbeit prüfen",
-        reason: `${inactiveDays} Tage ohne bezahlte Einheit bei niedrigem Preis`,
-        priority: 1
-      };
-    }
-
-    if (student.currentPrice && belowBenchmark) {
-      return {
-        action: "unter Zielpreis",
-        reason: `${formatPriceGap(student.currentPrice, benchmarkPrice)} unter Zielpreis ${rateMoney(benchmarkPrice)}`,
-        priority: 1
-      };
-    }
-
-    return null;
-  }
-
-  function getPriceStatus(student, recommendation, medianPrice, benchmarkPrice) {
-    if (recommendation) {
-      return recommendation;
-    }
-
-    if (student.currentPrice && benchmarkPrice && student.currentPrice >= benchmarkPrice * 0.95) {
-      return {
-        action: "stark",
-        reason: `nah am Zielpreis ${rateMoney(benchmarkPrice)}`,
+        action: "unbekannt",
+        reason: "aktueller Preply-Preis konnte nicht gelesen werden",
         priority: 0
       };
     }
 
-    if (isSubscriptionEndingSoon(student)) {
+    if (!student.currentPrice) {
       return {
-        action: "bald fällig",
-        reason: "Abo/Paket endet in den nächsten 14 Tagen",
-        priority: 1
+        action: "unbekannt",
+        reason: `kein Lesson Price in der CSV, Zielpreis ${rateMoney(targetPrice)}`,
+        priority: 0
+      };
+    }
+
+    const gapPercent = calculatePriceGapPercent(student.currentPrice, targetPrice);
+    if (!gapPercent || gapPercent <= 0.100001) {
+      return {
+        action: "ok",
+        reason: `maximal 10% unter aktuellem Preis ${rateMoney(targetPrice)}`,
+        priority: 0
+      };
+    }
+
+    if (gapPercent <= 0.200001) {
+      return {
+        action: "prüfen",
+        reason: `${formatPriceGap(student.currentPrice, targetPrice)} unter aktuellem Preis ${rateMoney(targetPrice)}`,
+        priority: 2
       };
     }
 
     return {
-      action: "ok",
-      reason: "",
-      priority: 0
+      action: "dringend",
+      reason: `${formatPriceGap(student.currentPrice, targetPrice)} unter aktuellem Preis ${rateMoney(targetPrice)}`,
+      priority: 3
     };
   }
 
-  function isSubscriptionEndingSoon(student) {
-    if (!student.nextSubscriptionDate) {
-      return false;
-    }
-
-    const days = daysUntil(student.nextSubscriptionDate);
-    return days >= 0 && days <= 14;
-  }
-
-  function median(values) {
-    const sorted = values.filter((value) => value > 0).sort((a, b) => a - b);
-    if (!sorted.length) {
+  function calculatePriceGap(currentPrice, targetPrice) {
+    if (!currentPrice || !targetPrice || currentPrice >= targetPrice) {
       return 0;
     }
 
-    const middle = Math.floor(sorted.length / 2);
-    return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+    return targetPrice - currentPrice;
   }
 
-  function percentile(values, percentileValue) {
-    const sorted = values.filter((value) => value > 0).sort((a, b) => a - b);
-    if (!sorted.length) {
+  function calculatePriceGapPercent(currentPrice, targetPrice) {
+    if (!currentPrice || !targetPrice || currentPrice >= targetPrice) {
       return 0;
     }
 
-    const index = (sorted.length - 1) * percentileValue;
-    const lower = Math.floor(index);
-    const upper = Math.ceil(index);
-    if (lower === upper) {
-      return sorted[lower];
-    }
-
-    return sorted[lower] + (sorted[upper] - sorted[lower]) * (index - lower);
+    return (targetPrice - currentPrice) / targetPrice;
   }
 
-  function calculatePriceGapPercent(currentPrice, benchmarkPrice) {
-    if (!currentPrice || !benchmarkPrice || currentPrice >= benchmarkPrice) {
-      return 0;
-    }
-
-    return (benchmarkPrice - currentPrice) / benchmarkPrice;
-  }
-
-  function formatPriceGap(currentPrice, benchmarkPrice) {
-    const gap = calculatePriceGapPercent(currentPrice, benchmarkPrice);
+  function formatPriceGap(currentPrice, targetPrice) {
+    const gap = calculatePriceGapPercent(currentPrice, targetPrice);
     return gap ? `${Math.round(gap * 100)}%` : "0%";
   }
 
@@ -1778,7 +1711,9 @@
       return `<p class="pp-empty">Noch keine Preisdaten gefunden. Dafür braucht die CSV die Spalte Lesson Price, USD.</p>`;
     }
 
+    const targetPrice = groups.find((group) => group.students.some((student) => student.targetPrice))?.students.find((student) => student.targetPrice)?.targetPrice || 0;
     return `
+      <p class="pp-section-note">Aktueller Preply-Preis: ${targetPrice ? rateMoney(targetPrice) : "unbekannt"}</p>
       <table class="pp-table pp-price-table">
         <thead>
           <tr>
@@ -1817,8 +1752,8 @@
                 <th>Lernende</th>
                 <th>Einnahmen</th>
                 <th>Einheiten</th>
-                <th>Status</th>
                 <th>Abo</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>
@@ -1860,8 +1795,8 @@
         <td>${renderStudentNameWithMeta(student)}</td>
         <td>${money(student.income)}</td>
         <td>${number(student.lessons || student.transactions)}</td>
-        <td>${renderStudentPriceStatus(student)}</td>
         <td>${renderBalanceProgress(student, { showSubscription: true })}</td>
+        <td>${renderStudentPriceStatus(student)}</td>
       </tr>
     `;
   }
@@ -1877,7 +1812,6 @@
     const status = student.priceStatus || { action: "ok", reason: "", priority: 0 };
     return `
       <span class="pp-badge pp-badge-${status.priority || 0}" title="${escapeHtml(buildStudentPriceTitle(student))}">${escapeHtml(status.action)}</span>
-      ${status.reason ? `<small class="pp-muted">${escapeHtml(status.reason)}</small>` : ""}
     `;
   }
 
@@ -1895,12 +1829,8 @@
       return { label: "prüfen", priority: 2 };
     }
 
-    if (group.students.some((student) => student.priceStatus?.action === "unter Zielpreis")) {
-      return { label: "unter Zielpreis", priority: 1 };
-    }
-
-    if (group.students.some((student) => student.priceStatus?.action === "bald fällig")) {
-      return { label: "bald fällig", priority: 1 };
+    if (group.students.every((student) => student.priceStatus?.action === "unbekannt")) {
+      return { label: "unbekannt", priority: 0 };
     }
 
     return { label: "ok", priority: 0 };
@@ -1947,9 +1877,9 @@
     return [
       student.student,
       student.currentPrice ? `Preis: ${rateMoney(student.currentPrice)}` : "",
+      student.targetPrice ? `Aktueller Preply-Preis: ${rateMoney(student.targetPrice)}` : "",
+      student.priceGap ? `Abstand: ${rateMoney(student.priceGap)} (${formatPercent(student.priceGapPercent)})` : "",
       student.firstPrice && student.firstPrice !== student.currentPrice ? `Erstpreis: ${rateMoney(student.firstPrice)}` : "",
-      student.priceBenchmark ? `Benchmark: ${rateMoney(student.priceBenchmark)}` : "",
-      student.priceGapPercent ? `Abstand: ${formatPercent(student.priceGapPercent)}` : "",
       student.priceAgeDays !== null ? `Preis seit ${student.priceAgeDays} Tagen` : "",
       student.priceStatus?.action,
       student.priceStatus?.reason,
