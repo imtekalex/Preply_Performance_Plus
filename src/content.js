@@ -808,7 +808,7 @@
     const avgPayoutLastThreeMonths = trailingThreeMonths.paidLessons ? trailingThreeMonths.income / trailingThreeMonths.paidLessons : 0;
     const avgHourlyRate = monthlyHours ? monthlyIncome / monthlyHours : 0;
     const students = rankStudents(allTime.transactions.length ? allTime.transactions : currentMonth.transactions);
-    const activeStudentsForBenchmark = filterActiveStudents(students, managedStudentMap);
+    const activeStudentsForBenchmark = withGlobalRanks(filterActiveStudents(students, managedStudentMap));
     const priceBenchmark = buildPriceBenchmark(activeStudentsForBenchmark, visible.currentLessonPrice);
     const monthlyBreakdown = buildMonthlyBreakdown(allTransactions);
     const avgWeeklyHours = calculateAverageWeeklyHours(allTime.hours, reportRange);
@@ -1224,9 +1224,9 @@
   }
 
   function comparePriceStudents(a, b) {
-    const priorityDelta = (b.priceStatus?.priority || 0) - (a.priceStatus?.priority || 0);
-    if (priorityDelta) {
-      return priorityDelta;
+    const rankDelta = (a.globalRank || Number.MAX_SAFE_INTEGER) - (b.globalRank || Number.MAX_SAFE_INTEGER);
+    if (rankDelta) {
+      return rankDelta;
     }
 
     const incomeDelta = b.income - a.income;
@@ -1240,6 +1240,13 @@
     }
 
     return a.student.localeCompare(b.student, "de");
+  }
+
+  function withGlobalRanks(students) {
+    return students.map((student, index) => ({
+      ...student,
+      globalRank: index + 1
+    }));
   }
 
   function buildManagedStudentMap(students) {
@@ -1697,7 +1704,7 @@
   function renderStudentRows(students, hasHours, offset = 0, hidden = false, includeRank = true) {
     return students.map((student, index) => `
       <tr${hidden ? ' class="pp-ranking-extra-row pp-hidden"' : ""}>
-        ${includeRank ? `<td class="pp-cell-rank">${offset + index + 1}</td>` : ""}
+        ${includeRank ? `<td class="pp-cell-rank">${student.globalRank || offset + index + 1}</td>` : ""}
         <td class="pp-cell-student">${escapeHtml(student.student)}</td>
         <td class="pp-cell-income">${money(student.income)}</td>
         <td class="pp-cell-lessons">${number(student.lessons || student.transactions)}</td>
