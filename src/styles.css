@@ -320,25 +320,25 @@
 }
 
 .pp-price-detail-table td:nth-child(1) {
-  width: 30%;
+  width: 28%;
 }
 
 .pp-price-detail-table td:nth-child(2) {
-  width: 12%;
+  width: 13%;
   white-space: nowrap;
 }
 
 .pp-price-detail-table td:nth-child(3) {
-  width: 10%;
+  width: 14%;
   white-space: nowrap;
 }
 
 .pp-price-detail-table td:nth-child(4) {
-  width: 38%;
+  width: 36%;
 }
 
 .pp-price-detail-table td:nth-child(5) {
-  width: 10%;
+  width: 9%;
 }
 
 .pp-ranking-toggle {
@@ -387,16 +387,15 @@
 
 .pp-student-name {
   display: block;
-  overflow: hidden;
   color: #0f172a;
   font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .pp-progress-cell {
   display: grid;
-  min-width: 88px;
+  min-width: 72px;
   gap: 4px;
 }
 

@@ -1212,7 +1212,7 @@
         ...group,
         avgEarning: group.paidLessons ? group.income / group.paidLessons : 0,
         studentCount: group.students.length,
-        students: group.students.sort((a, b) => a.student.localeCompare(b.student, "de"))
+        students: group.students.sort(comparePriceStudents)
       }))
       .sort((a, b) => {
         if (!a.price) {
@@ -1223,6 +1223,25 @@
         }
         return b.price - a.price;
       });
+  }
+
+  function comparePriceStudents(a, b) {
+    const priorityDelta = (b.priceStatus?.priority || 0) - (a.priceStatus?.priority || 0);
+    if (priorityDelta) {
+      return priorityDelta;
+    }
+
+    const incomeDelta = b.income - a.income;
+    if (incomeDelta) {
+      return incomeDelta;
+    }
+
+    const lessonDelta = (b.lessons || b.transactions) - (a.lessons || a.transactions);
+    if (lessonDelta) {
+      return lessonDelta;
+    }
+
+    return a.student.localeCompare(b.student, "de");
   }
 
   function buildManagedStudentMap(students) {
@@ -1779,7 +1798,7 @@
   }
 
   function renderPriceGroup(group, index) {
-    const isOpen = group.maxPriority >= 2;
+    const isOpen = false;
     const groupId = `pp-price-group-${index}`;
     return `
       <tr class="pp-price-group-row ${group.maxPriority ? `pp-priority-row pp-priority-row-${group.maxPriority}` : ""}" data-pp-group="${groupId}" role="button" tabindex="0" aria-expanded="${isOpen ? "true" : "false"}">
