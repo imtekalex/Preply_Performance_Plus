@@ -323,18 +323,18 @@
   text-align: left;
 }
 
-.pp-student-table th:nth-child(1),
-.pp-student-table th:nth-child(3),
-.pp-student-table th:nth-child(4),
-.pp-student-table th:nth-child(6),
-.pp-student-table th:nth-child(7),
-.pp-student-table th:nth-child(8),
-.pp-student-table th:nth-child(9) {
+.pp-head-rank,
+.pp-head-income,
+.pp-head-lessons,
+.pp-head-hours,
+.pp-head-hourly,
+.pp-head-price,
+.pp-head-wage {
   text-align: right;
 }
 
-.pp-student-table th:nth-child(2),
-.pp-student-table th:nth-child(5) {
+.pp-head-student,
+.pp-head-balance {
   text-align: left;
 }
 

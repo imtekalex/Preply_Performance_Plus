@@ -1689,14 +1689,14 @@
   function renderStudentHeader(hasHours, includeRank = true) {
     return `
       <tr>
-        ${includeRank ? "<th>Rang</th>" : ""}
-        <th>Lernende</th>
-        <th>Einnahmen</th>
-        <th>Einheiten</th>
-        <th>Abo</th>
-        ${hasHours ? "<th>Stunden</th><th>Ø pro Stunde</th>" : ""}
-        <th title="Lesson Price">Preis</th>
-        <th title="Earning, USD pro bezahlter Einheit">Lohn</th>
+        ${includeRank ? '<th class="pp-head-rank">Rang</th>' : ""}
+        <th class="pp-head-student">Lernende</th>
+        <th class="pp-head-income">Einnahmen</th>
+        <th class="pp-head-lessons">Einheiten</th>
+        <th class="pp-head-balance">Abo</th>
+        ${hasHours ? '<th class="pp-head-hours">Stunden</th><th class="pp-head-hourly">Ø pro Stunde</th>' : ""}
+        <th class="pp-head-price" title="Lesson Price">Preis</th>
+        <th class="pp-head-wage" title="Earning, USD pro bezahlter Einheit">Lohn</th>
       </tr>
     `;
   }
@@ -1826,7 +1826,7 @@
 
     return `
       <div class="pp-status-cell">
-        <span class="pp-badge pp-badge-${status.priority || 0}">${escapeHtml(status.action)}</span>
+        <span class="pp-badge pp-badge-${status.priority || 0}">${escapeHtml(status.label)}</span>
         ${detail ? `<small>${escapeHtml(detail)}</small>` : ""}
       </div>
     `;
