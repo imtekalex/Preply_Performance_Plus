@@ -320,31 +320,40 @@
 }
 
 .pp-price-detail-table td:nth-child(1) {
-  width: 34%;
+  width: 30%;
 }
 
 .pp-price-detail-table td:nth-child(2) {
-  width: 42%;
-}
-
-.pp-price-detail-table td:nth-child(3),
-.pp-price-detail-table td:nth-child(4) {
-  width: 9%;
+  width: 12%;
   white-space: nowrap;
 }
 
-.pp-price-detail-table td:nth-child(5) {
-  width: 6%;
+.pp-price-detail-table td:nth-child(3) {
+  width: 10%;
+  white-space: nowrap;
 }
 
-.pp-ranking-details summary {
+.pp-price-detail-table td:nth-child(4) {
+  width: 38%;
+}
+
+.pp-price-detail-table td:nth-child(5) {
+  width: 10%;
+}
+
+.pp-ranking-toggle {
+  padding: 0;
+  border: 0;
+  background: transparent;
   cursor: pointer;
   color: #0450b4;
+  font: inherit;
   font-weight: 700;
 }
 
-.pp-ranking-extra-table {
-  margin-top: 8px;
+.pp-ranking-toggle:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .pp-month-table th,
@@ -448,6 +457,20 @@
 
 .pp-priority-row-1 td {
   background: #fff7ed;
+}
+
+.pp-price-table .pp-priority-row-3 td,
+.pp-price-table .pp-priority-row-2 td,
+.pp-price-table .pp-priority-row-1 td {
+  background: inherit;
+}
+
+.pp-price-table .pp-price-group-row > td {
+  background: #f8fafc;
+}
+
+.pp-price-table .pp-price-group-row:hover > td {
+  background: #eef6ff;
 }
 
 .pp-muted {

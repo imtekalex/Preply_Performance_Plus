@@ -1492,6 +1492,7 @@
     `;
     bindMonthPager();
     bindPriceGroups();
+    bindRankingToggle();
     document.getElementById("pp-clear-cache-link")?.addEventListener("click", confirmAndClearCache);
   }
 
@@ -1707,25 +1708,21 @@
         <tbody>
           ${renderStudentRows(students.slice(0, 5), hasHours)}
           ${students.length > 5 ? `
-            <tr>
+            <tr class="pp-ranking-toggle-row">
               <td colspan="${hasHours ? 9 : 7}">
-                <details class="pp-ranking-details">
-                  <summary>${number(students.length - 5)} weitere Lernende anzeigen</summary>
-                  <table class="pp-table pp-ranking-extra-table">
-                    <tbody>${renderStudentRows(students.slice(5), hasHours, 5)}</tbody>
-                  </table>
-                </details>
+                <button class="pp-ranking-toggle" type="button" data-pp-ranking-toggle aria-expanded="false">${number(students.length - 5)} weitere Lernende anzeigen</button>
               </td>
             </tr>
+            ${renderStudentRows(students.slice(5), hasHours, 5, true)}
           ` : ""}
         </tbody>
       </table>
     `;
   }
 
-  function renderStudentRows(students, hasHours, offset = 0) {
+  function renderStudentRows(students, hasHours, offset = 0, hidden = false) {
     return students.map((student, index) => `
-      <tr>
+      <tr${hidden ? ' class="pp-ranking-extra-row pp-hidden"' : ""}>
         <td>${offset + index + 1}</td>
         <td>${escapeHtml(student.student)}</td>
         <td>${money(student.income)}</td>
@@ -1736,6 +1733,25 @@
         <td>${rateOrNA(student.lessonRate)}</td>
       </tr>
     `).join("");
+  }
+
+  function bindRankingToggle() {
+    const button = document.querySelector("[data-pp-ranking-toggle]");
+    if (!button) {
+      return;
+    }
+
+    const hiddenCount = document.querySelectorAll(".pp-ranking-extra-row").length;
+    button.addEventListener("click", () => {
+      const isOpen = button.getAttribute("aria-expanded") === "true";
+      document.querySelectorAll(".pp-ranking-extra-row").forEach((row) => {
+        row.classList.toggle("pp-hidden", isOpen);
+      });
+      button.setAttribute("aria-expanded", isOpen ? "false" : "true");
+      button.textContent = isOpen
+        ? `${number(hiddenCount)} weitere Lernende anzeigen`
+        : "Weitere Lernende ausblenden";
+    });
   }
 
   function renderPriceBenchmark(groups) {
@@ -1780,9 +1796,9 @@
             <thead>
               <tr>
                 <th>Lernende</th>
-                <th>Status</th>
                 <th>Einnahmen</th>
                 <th>Einheiten</th>
+                <th>Status</th>
                 <th>Abo</th>
               </tr>
             </thead>
@@ -1823,9 +1839,9 @@
     return `
       <tr class="${student.priceStatus?.priority ? `pp-priority-row pp-priority-row-${student.priceStatus.priority}` : ""}">
         <td>${renderStudentNameWithMeta(student)}</td>
-        <td>${renderStudentPriceStatus(student)}</td>
         <td>${money(student.income)}</td>
         <td>${number(student.lessons || student.transactions)}</td>
+        <td>${renderStudentPriceStatus(student)}</td>
         <td>${renderBalanceProgress(student, { showSubscription: true })}</td>
       </tr>
     `;
