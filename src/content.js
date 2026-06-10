@@ -1644,7 +1644,7 @@
     const hasHours = students.some((student) => student.hours > 0);
 
     return `
-      <table class="pp-table pp-student-table">
+      <table class="pp-table pp-student-table pp-with-rank ${hasHours ? "pp-has-hours" : "pp-no-hours"}">
         ${renderStudentColgroup(hasHours)}
         <thead>
           ${renderStudentHeader(hasHours)}
@@ -1664,7 +1664,7 @@
     `;
   }
 
-  function renderStudentColgroup(hasHours, includeRank = true, includeStatus = false) {
+  function renderStudentColgroup(hasHours, includeRank = true) {
     return `
       <colgroup>
         ${includeRank ? '<col class="pp-col-rank">' : ""}
@@ -1675,12 +1675,11 @@
         ${hasHours ? '<col class="pp-col-hours"><col class="pp-col-hourly">' : ""}
         <col class="pp-col-price">
         <col class="pp-col-wage">
-        ${includeStatus ? '<col class="pp-col-status">' : ""}
       </colgroup>
     `;
   }
 
-  function renderStudentHeader(hasHours, includeRank = true, includeStatus = false) {
+  function renderStudentHeader(hasHours, includeRank = true) {
     return `
       <tr>
         ${includeRank ? "<th>Rang</th>" : ""}
@@ -1691,12 +1690,11 @@
         ${hasHours ? "<th>Stunden</th><th>Ø pro Stunde</th>" : ""}
         <th title="Lesson Price">Preis</th>
         <th title="Earning, USD pro bezahlter Einheit">Lohn</th>
-        ${includeStatus ? "<th>Status</th>" : ""}
       </tr>
     `;
   }
 
-  function renderStudentRows(students, hasHours, offset = 0, hidden = false, includeRank = true, includeStatus = false) {
+  function renderStudentRows(students, hasHours, offset = 0, hidden = false, includeRank = true) {
     return students.map((student, index) => `
       <tr${hidden ? ' class="pp-ranking-extra-row pp-hidden"' : ""}>
         ${includeRank ? `<td class="pp-cell-rank">${offset + index + 1}</td>` : ""}
@@ -1707,7 +1705,6 @@
         ${hasHours ? `<td class="pp-cell-hours">${number(student.hours)}</td><td class="pp-cell-hourly">${rateOrNA(student.hourlyRate)}</td>` : ""}
         <td class="pp-cell-price">${rateOrNA(student.currentPrice)}</td>
         <td class="pp-cell-wage">${rateOrNA(student.lessonRate)}</td>
-        ${includeStatus ? `<td class="pp-cell-status">${renderStudentPriceStatus(student)}</td>` : ""}
       </tr>
     `).join("");
   }
@@ -1772,13 +1769,13 @@
       </tr>
       <tr class="pp-price-detail-row ${isOpen ? "" : "pp-hidden"}" data-pp-group-details="${groupId}">
         <td colspan="6">
-          <table class="pp-table pp-student-table pp-price-detail-table">
-            ${renderStudentColgroup(hasHours, false, true)}
+          <table class="pp-table pp-student-table pp-without-rank ${hasHours ? "pp-has-hours" : "pp-no-hours"} pp-price-detail-table">
+            ${renderStudentColgroup(hasHours, false)}
             <thead>
-              ${renderStudentHeader(hasHours, false, true)}
+              ${renderStudentHeader(hasHours, false)}
             </thead>
             <tbody>
-              ${renderStudentRows(group.students, hasHours, 0, false, false, true)}
+              ${renderStudentRows(group.students, hasHours, 0, false, false)}
             </tbody>
           </table>
         </td>
@@ -1810,25 +1807,24 @@
     });
   }
 
-  function renderStudentPriceStatus(student) {
-    const status = student.priceStatus || { action: "ok", reason: "", priority: 0 };
+  function renderGroupPriceStatus(group) {
+    const status = getGroupPriceStatus(group);
+    const representative = group.students
+      .find((student) => (student.priceStatus?.priority || 0) === status.priority)
+      || group.students[0]
+      || {};
     const details = [
-      status.reason,
-      student.targetPrice ? `Zielpreis: ${rateMoney(student.targetPrice)}` : "",
-      student.priceGap ? `Abstand: ${rateMoney(student.priceGap)} (${formatPercent(student.priceGapPercent)})` : ""
+      representative.priceStatus?.reason,
+      representative.targetPrice ? `Zielpreis: ${rateMoney(representative.targetPrice)}` : "",
+      representative.priceGap ? `Abstand: ${rateMoney(representative.priceGap)} (${formatPercent(representative.priceGapPercent)})` : ""
     ].filter(Boolean);
 
     return `
-      <div class="pp-status-cell" title="${escapeHtml(buildStudentPriceTitle(student))}">
+      <div class="pp-status-cell">
         <span class="pp-badge pp-badge-${status.priority || 0}">${escapeHtml(status.action)}</span>
         ${details.map((detail) => `<small>${escapeHtml(detail)}</small>`).join("")}
       </div>
     `;
-  }
-
-  function renderGroupPriceStatus(group) {
-    const status = getGroupPriceStatus(group);
-    return `<span class="pp-badge pp-badge-${status.priority}">${escapeHtml(status.label)}</span>`;
   }
 
   function getGroupPriceStatus(group) {
@@ -1882,20 +1878,6 @@
     }
 
     return `${number(item.utilisedHours)} / ${number(item.totalHours)}`;
-  }
-
-  function buildStudentPriceTitle(student) {
-    return [
-      student.student,
-      student.currentPrice ? `Preis: ${rateMoney(student.currentPrice)}` : "",
-      student.targetPrice ? `Aktueller Preply-Preis: ${rateMoney(student.targetPrice)}` : "",
-      student.priceGap ? `Abstand: ${rateMoney(student.priceGap)} (${formatPercent(student.priceGapPercent)})` : "",
-      student.firstPrice && student.firstPrice !== student.currentPrice ? `Erstpreis: ${rateMoney(student.firstPrice)}` : "",
-      student.priceAgeDays !== null ? `Preis seit ${student.priceAgeDays} Tagen` : "",
-      student.priceStatus?.action,
-      student.priceStatus?.reason,
-      student.nextSubscriptionDate ? `Abo/Paket: ${formatShortDate(student.nextSubscriptionDate)}` : ""
-    ].filter(Boolean).join(" - ");
   }
 
   function formatShortDate(date) {

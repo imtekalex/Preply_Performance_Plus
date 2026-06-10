@@ -239,37 +239,95 @@
 }
 
 .pp-col-rank {
-  width: 54px;
+  width: 7%;
 }
 
 .pp-col-student {
-  width: auto;
+  width: 25%;
 }
 
 .pp-col-income {
-  width: 112px;
+  width: 13%;
 }
 
 .pp-col-lessons {
-  width: 104px;
+  width: 13%;
 }
 
 .pp-col-balance {
-  width: 118px;
+  width: 17%;
 }
 
 .pp-col-hours,
 .pp-col-hourly {
-  width: 96px;
+  width: 10%;
 }
 
 .pp-col-price,
 .pp-col-wage {
-  width: 86px;
+  width: 12.5%;
 }
 
-.pp-col-status {
-  width: 210px;
+.pp-without-rank .pp-col-student {
+  width: 32%;
+}
+
+.pp-without-rank .pp-col-income,
+.pp-without-rank .pp-col-lessons {
+  width: 14%;
+}
+
+.pp-without-rank .pp-col-balance {
+  width: 18%;
+}
+
+.pp-without-rank .pp-col-price,
+.pp-without-rank .pp-col-wage {
+  width: 11%;
+}
+
+.pp-has-hours.pp-with-rank .pp-col-rank {
+  width: 6%;
+}
+
+.pp-has-hours.pp-with-rank .pp-col-student {
+  width: 20%;
+}
+
+.pp-has-hours.pp-with-rank .pp-col-income,
+.pp-has-hours.pp-with-rank .pp-col-lessons {
+  width: 11%;
+}
+
+.pp-has-hours.pp-with-rank .pp-col-balance {
+  width: 14%;
+}
+
+.pp-has-hours.pp-with-rank .pp-col-hours,
+.pp-has-hours.pp-with-rank .pp-col-hourly,
+.pp-has-hours.pp-with-rank .pp-col-price,
+.pp-has-hours.pp-with-rank .pp-col-wage {
+  width: 9.5%;
+}
+
+.pp-has-hours.pp-without-rank .pp-col-student {
+  width: 26%;
+}
+
+.pp-has-hours.pp-without-rank .pp-col-income,
+.pp-has-hours.pp-without-rank .pp-col-lessons {
+  width: 11%;
+}
+
+.pp-has-hours.pp-without-rank .pp-col-balance {
+  width: 14%;
+}
+
+.pp-has-hours.pp-without-rank .pp-col-hours,
+.pp-has-hours.pp-without-rank .pp-col-hourly,
+.pp-has-hours.pp-without-rank .pp-col-price,
+.pp-has-hours.pp-without-rank .pp-col-wage {
+  width: 9.5%;
 }
 
 .pp-cell-rank,
@@ -283,8 +341,7 @@
   white-space: nowrap;
 }
 
-.pp-cell-student,
-.pp-cell-status {
+.pp-cell-student {
   white-space: normal;
   overflow-wrap: anywhere;
 }
@@ -305,12 +362,12 @@
 
 .pp-price-table th:nth-child(3),
 .pp-price-table td:nth-child(3) {
-  width: 140px;
+  width: 120px;
 }
 
 .pp-price-table th:nth-child(4),
 .pp-price-table td:nth-child(4) {
-  width: 140px;
+  width: 240px;
 }
 
 .pp-price-table th:nth-child(5),
@@ -434,14 +491,6 @@
   font-size: 12px;
   font-weight: 650;
   line-height: 1.2;
-  overflow-wrap: anywhere;
-  white-space: normal;
-}
-
-.pp-student-name {
-  display: block;
-  color: #0f172a;
-  font-weight: 700;
   overflow-wrap: anywhere;
   white-space: normal;
 }
