@@ -234,6 +234,61 @@
   white-space: normal;
 }
 
+.pp-student-table {
+  table-layout: fixed;
+}
+
+.pp-col-rank {
+  width: 54px;
+}
+
+.pp-col-student {
+  width: auto;
+}
+
+.pp-col-income {
+  width: 112px;
+}
+
+.pp-col-lessons {
+  width: 104px;
+}
+
+.pp-col-balance {
+  width: 118px;
+}
+
+.pp-col-hours,
+.pp-col-hourly {
+  width: 96px;
+}
+
+.pp-col-price,
+.pp-col-wage {
+  width: 86px;
+}
+
+.pp-col-status {
+  width: 210px;
+}
+
+.pp-cell-rank,
+.pp-cell-income,
+.pp-cell-lessons,
+.pp-cell-balance,
+.pp-cell-hours,
+.pp-cell-hourly,
+.pp-cell-price,
+.pp-cell-wage {
+  white-space: nowrap;
+}
+
+.pp-cell-student,
+.pp-cell-status {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .pp-price-table {
   table-layout: fixed;
 }
@@ -339,33 +394,6 @@
   text-transform: uppercase;
 }
 
-.pp-price-detail-table th:nth-child(1),
-.pp-price-detail-table td:nth-child(1) {
-  width: 35%;
-}
-
-.pp-price-detail-table th:nth-child(2),
-.pp-price-detail-table td:nth-child(2) {
-  width: 13%;
-  white-space: nowrap;
-}
-
-.pp-price-detail-table th:nth-child(3),
-.pp-price-detail-table td:nth-child(3) {
-  width: 14%;
-  white-space: nowrap;
-}
-
-.pp-price-detail-table th:nth-child(4),
-.pp-price-detail-table td:nth-child(4) {
-  width: 18%;
-}
-
-.pp-price-detail-table th:nth-child(5),
-.pp-price-detail-table td:nth-child(5) {
-  width: 20%;
-}
-
 .pp-ranking-toggle {
   padding: 0;
   border: 0;
@@ -449,6 +477,22 @@
   padding: 5px 9px;
   background: #e2e8f0;
   color: #334155;
+}
+
+.pp-status-cell {
+  display: grid;
+  gap: 4px;
+  align-items: start;
+}
+
+.pp-status-cell .pp-badge {
+  justify-self: start;
+}
+
+.pp-status-cell small {
+  color: #526071;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .pp-badge-3 {

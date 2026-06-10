@@ -1644,18 +1644,10 @@
     const hasHours = students.some((student) => student.hours > 0);
 
     return `
-      <table class="pp-table">
+      <table class="pp-table pp-student-table">
+        ${renderStudentColgroup(hasHours)}
         <thead>
-          <tr>
-            <th>Rang</th>
-            <th>Lernende</th>
-            <th>Einnahmen</th>
-            <th>Einheiten</th>
-            <th>Abo</th>
-            ${hasHours ? "<th>Stunden</th><th>Ø pro Stunde</th>" : ""}
-            <th title="Lesson Price">Preis</th>
-            <th title="Earning, USD pro bezahlter Einheit">Lohn</th>
-          </tr>
+          ${renderStudentHeader(hasHours)}
         </thead>
         <tbody>
           ${renderStudentRows(students.slice(0, 5), hasHours)}
@@ -1672,17 +1664,50 @@
     `;
   }
 
-  function renderStudentRows(students, hasHours, offset = 0, hidden = false) {
+  function renderStudentColgroup(hasHours, includeRank = true, includeStatus = false) {
+    return `
+      <colgroup>
+        ${includeRank ? '<col class="pp-col-rank">' : ""}
+        <col class="pp-col-student">
+        <col class="pp-col-income">
+        <col class="pp-col-lessons">
+        <col class="pp-col-balance">
+        ${hasHours ? '<col class="pp-col-hours"><col class="pp-col-hourly">' : ""}
+        <col class="pp-col-price">
+        <col class="pp-col-wage">
+        ${includeStatus ? '<col class="pp-col-status">' : ""}
+      </colgroup>
+    `;
+  }
+
+  function renderStudentHeader(hasHours, includeRank = true, includeStatus = false) {
+    return `
+      <tr>
+        ${includeRank ? "<th>Rang</th>" : ""}
+        <th>Lernende</th>
+        <th>Einnahmen</th>
+        <th>Einheiten</th>
+        <th>Abo</th>
+        ${hasHours ? "<th>Stunden</th><th>Ø pro Stunde</th>" : ""}
+        <th title="Lesson Price">Preis</th>
+        <th title="Earning, USD pro bezahlter Einheit">Lohn</th>
+        ${includeStatus ? "<th>Status</th>" : ""}
+      </tr>
+    `;
+  }
+
+  function renderStudentRows(students, hasHours, offset = 0, hidden = false, includeRank = true, includeStatus = false) {
     return students.map((student, index) => `
       <tr${hidden ? ' class="pp-ranking-extra-row pp-hidden"' : ""}>
-        <td>${offset + index + 1}</td>
-        <td>${escapeHtml(student.student)}</td>
-        <td>${money(student.income)}</td>
-        <td>${number(student.lessons || student.transactions)}</td>
-        <td>${renderBalanceProgress(student)}</td>
-        ${hasHours ? `<td>${number(student.hours)}</td><td>${rateOrNA(student.hourlyRate)}</td>` : ""}
-        <td>${rateOrNA(student.currentPrice)}</td>
-        <td>${rateOrNA(student.lessonRate)}</td>
+        ${includeRank ? `<td class="pp-cell-rank">${offset + index + 1}</td>` : ""}
+        <td class="pp-cell-student">${escapeHtml(student.student)}</td>
+        <td class="pp-cell-income">${money(student.income)}</td>
+        <td class="pp-cell-lessons">${number(student.lessons || student.transactions)}</td>
+        <td class="pp-cell-balance">${renderBalanceProgress(student)}</td>
+        ${hasHours ? `<td class="pp-cell-hours">${number(student.hours)}</td><td class="pp-cell-hourly">${rateOrNA(student.hourlyRate)}</td>` : ""}
+        <td class="pp-cell-price">${rateOrNA(student.currentPrice)}</td>
+        <td class="pp-cell-wage">${rateOrNA(student.lessonRate)}</td>
+        ${includeStatus ? `<td class="pp-cell-status">${renderStudentPriceStatus(student)}</td>` : ""}
       </tr>
     `).join("");
   }
@@ -1735,6 +1760,7 @@
   function renderPriceGroup(group, index) {
     const isOpen = false;
     const groupId = `pp-price-group-${index}`;
+    const hasHours = group.students.some((student) => student.hours > 0);
     return `
       <tr class="pp-price-group-row ${group.maxPriority ? `pp-priority-row pp-priority-row-${group.maxPriority}` : ""}" data-pp-group="${groupId}" role="button" tabindex="0" aria-expanded="${isOpen ? "true" : "false"}">
         <td><span class="pp-row-caret" aria-hidden="true"></span>${escapeHtml(group.label)}</td>
@@ -1746,18 +1772,13 @@
       </tr>
       <tr class="pp-price-detail-row ${isOpen ? "" : "pp-hidden"}" data-pp-group-details="${groupId}">
         <td colspan="6">
-          <table class="pp-price-detail-table">
+          <table class="pp-table pp-student-table pp-price-detail-table">
+            ${renderStudentColgroup(hasHours, false, true)}
             <thead>
-              <tr>
-                <th>Lernende</th>
-                <th>Einnahmen</th>
-                <th>Einheiten</th>
-                <th>Abo</th>
-                <th>Status</th>
-              </tr>
+              ${renderStudentHeader(hasHours, false, true)}
             </thead>
             <tbody>
-              ${group.students.map(renderPriceStudentRow).join("")}
+              ${renderStudentRows(group.students, hasHours, 0, false, false, true)}
             </tbody>
           </table>
         </td>
@@ -1789,29 +1810,19 @@
     });
   }
 
-  function renderPriceStudentRow(student) {
-    return `
-      <tr class="${student.priceStatus?.priority ? `pp-priority-row pp-priority-row-${student.priceStatus.priority}` : ""}">
-        <td>${renderStudentNameWithMeta(student)}</td>
-        <td>${money(student.income)}</td>
-        <td>${number(student.lessons || student.transactions)}</td>
-        <td>${renderBalanceProgress(student, { showSubscription: true })}</td>
-        <td>${renderStudentPriceStatus(student)}</td>
-      </tr>
-    `;
-  }
-
-  function renderStudentNameWithMeta(student) {
-    const title = buildStudentPriceTitle(student);
-    return `
-      <span class="pp-student-name" title="${escapeHtml(title)}">${escapeHtml(student.student)}</span>
-    `;
-  }
-
   function renderStudentPriceStatus(student) {
     const status = student.priceStatus || { action: "ok", reason: "", priority: 0 };
+    const details = [
+      status.reason,
+      student.targetPrice ? `Zielpreis: ${rateMoney(student.targetPrice)}` : "",
+      student.priceGap ? `Abstand: ${rateMoney(student.priceGap)} (${formatPercent(student.priceGapPercent)})` : ""
+    ].filter(Boolean);
+
     return `
-      <span class="pp-badge pp-badge-${status.priority || 0}" title="${escapeHtml(buildStudentPriceTitle(student))}">${escapeHtml(status.action)}</span>
+      <div class="pp-status-cell" title="${escapeHtml(buildStudentPriceTitle(student))}">
+        <span class="pp-badge pp-badge-${status.priority || 0}">${escapeHtml(status.action)}</span>
+        ${details.map((detail) => `<small>${escapeHtml(detail)}</small>`).join("")}
+      </div>
     `;
   }
 
