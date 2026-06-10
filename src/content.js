@@ -1769,13 +1769,13 @@
       </tr>
       <tr class="pp-price-detail-row ${isOpen ? "" : "pp-hidden"}" data-pp-group-details="${groupId}">
         <td colspan="6">
-          <table class="pp-table pp-student-table pp-without-rank ${hasHours ? "pp-has-hours" : "pp-no-hours"} pp-price-detail-table">
-            ${renderStudentColgroup(hasHours, false)}
+          <table class="pp-table pp-student-table pp-with-rank ${hasHours ? "pp-has-hours" : "pp-no-hours"} pp-price-detail-table">
+            ${renderStudentColgroup(hasHours)}
             <thead>
-              ${renderStudentHeader(hasHours, false)}
+              ${renderStudentHeader(hasHours)}
             </thead>
             <tbody>
-              ${renderStudentRows(group.students, hasHours, 0, false, false)}
+              ${renderStudentRows(group.students, hasHours)}
             </tbody>
           </table>
         </td>

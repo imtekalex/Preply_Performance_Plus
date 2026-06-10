@@ -268,24 +268,6 @@
   width: 12.5%;
 }
 
-.pp-without-rank .pp-col-student {
-  width: 32%;
-}
-
-.pp-without-rank .pp-col-income,
-.pp-without-rank .pp-col-lessons {
-  width: 14%;
-}
-
-.pp-without-rank .pp-col-balance {
-  width: 18%;
-}
-
-.pp-without-rank .pp-col-price,
-.pp-without-rank .pp-col-wage {
-  width: 11%;
-}
-
 .pp-has-hours.pp-with-rank .pp-col-rank {
   width: 6%;
 }
@@ -307,26 +289,6 @@
 .pp-has-hours.pp-with-rank .pp-col-hourly,
 .pp-has-hours.pp-with-rank .pp-col-price,
 .pp-has-hours.pp-with-rank .pp-col-wage {
-  width: 9.5%;
-}
-
-.pp-has-hours.pp-without-rank .pp-col-student {
-  width: 26%;
-}
-
-.pp-has-hours.pp-without-rank .pp-col-income,
-.pp-has-hours.pp-without-rank .pp-col-lessons {
-  width: 11%;
-}
-
-.pp-has-hours.pp-without-rank .pp-col-balance {
-  width: 14%;
-}
-
-.pp-has-hours.pp-without-rank .pp-col-hours,
-.pp-has-hours.pp-without-rank .pp-col-hourly,
-.pp-has-hours.pp-without-rank .pp-col-price,
-.pp-has-hours.pp-without-rank .pp-col-wage {
   width: 9.5%;
 }
 
