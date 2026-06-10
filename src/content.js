@@ -1765,7 +1765,7 @@
         <td>${number(group.studentCount)} Lernende</td>
         <td>${renderGroupPriceStatus(group)}</td>
         <td>${money(group.income)}</td>
-        <td>${number(group.lessons)} Einheiten</td>
+        <td>${number(group.lessons)}</td>
       </tr>
       <tr class="pp-price-detail-row ${isOpen ? "" : "pp-hidden"}" data-pp-group-details="${groupId}">
         <td colspan="6">

@@ -308,6 +308,36 @@
   overflow-wrap: anywhere;
 }
 
+.pp-cell-rank,
+.pp-cell-income,
+.pp-cell-lessons,
+.pp-cell-hours,
+.pp-cell-hourly,
+.pp-cell-price,
+.pp-cell-wage {
+  text-align: right;
+}
+
+.pp-cell-student,
+.pp-cell-balance {
+  text-align: left;
+}
+
+.pp-student-table th:nth-child(1),
+.pp-student-table th:nth-child(3),
+.pp-student-table th:nth-child(4),
+.pp-student-table th:nth-child(6),
+.pp-student-table th:nth-child(7),
+.pp-student-table th:nth-child(8),
+.pp-student-table th:nth-child(9) {
+  text-align: right;
+}
+
+.pp-student-table th:nth-child(2),
+.pp-student-table th:nth-child(5) {
+  text-align: left;
+}
+
 .pp-price-table {
   table-layout: fixed;
 }
@@ -345,6 +375,24 @@
 .pp-price-table td:nth-child(3),
 .pp-price-table td:nth-child(4) {
   white-space: normal;
+}
+
+.pp-price-table th:nth-child(1),
+.pp-price-table td:nth-child(1),
+.pp-price-table th:nth-child(2),
+.pp-price-table td:nth-child(2),
+.pp-price-table th:nth-child(5),
+.pp-price-table td:nth-child(5),
+.pp-price-table th:nth-child(6),
+.pp-price-table td:nth-child(6) {
+  text-align: right;
+}
+
+.pp-price-table th:nth-child(3),
+.pp-price-table td:nth-child(3),
+.pp-price-table th:nth-child(4),
+.pp-price-table td:nth-child(4) {
+  text-align: left;
 }
 
 .pp-price-group-row > td {
