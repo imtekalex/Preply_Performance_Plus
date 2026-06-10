@@ -1813,16 +1813,14 @@
       .find((student) => (student.priceStatus?.priority || 0) === status.priority)
       || group.students[0]
       || {};
-    const details = [
-      representative.priceStatus?.reason,
-      representative.targetPrice ? `Zielpreis: ${rateMoney(representative.targetPrice)}` : "",
-      representative.priceGap ? `Abstand: ${rateMoney(representative.priceGap)} (${formatPercent(representative.priceGapPercent)})` : ""
-    ].filter(Boolean);
+    const detail = representative.priceGap
+      ? `${rateMoney(representative.priceGap)} (${formatPercent(representative.priceGapPercent)}) unter Preis`
+      : representative.priceStatus?.reason || "";
 
     return `
       <div class="pp-status-cell">
         <span class="pp-badge pp-badge-${status.priority || 0}">${escapeHtml(status.action)}</span>
-        ${details.map((detail) => `<small>${escapeHtml(detail)}</small>`).join("")}
+        ${detail ? `<small>${escapeHtml(detail)}</small>` : ""}
       </div>
     `;
   }
