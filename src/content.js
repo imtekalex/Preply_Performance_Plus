@@ -1452,6 +1452,7 @@
     bindMonthPager();
     bindPriceGroups();
     bindRankingToggle();
+    bindSortableTables();
     document.getElementById("pp-clear-cache-link")?.addEventListener("click", confirmAndClearCache);
   }
 
@@ -1521,23 +1522,23 @@
       <table class="pp-table pp-month-table">
         <thead>
           <tr>
-            <th>Monat</th>
-            <th>Einnahmen</th>
-            <th>Einheiten</th>
-            ${hasHours ? "<th>Stunden</th><th>Ø pro Stunde</th>" : ""}
-            <th>Ø Preis</th>
-            <th>Ø Lohn</th>
+            ${sortableHead("Monat")}
+            ${sortableHead("Einnahmen")}
+            ${sortableHead("Einheiten")}
+            ${hasHours ? `${sortableHead("Stunden")}${sortableHead("Ø pro Stunde")}` : ""}
+            ${sortableHead("Ø Preis")}
+            ${sortableHead("Ø Lohn")}
           </tr>
         </thead>
         <tbody>
           ${yearMonths.map((month) => `
             <tr>
-              <td>${escapeHtml(formatMonth(month.date))}</td>
-              <td>${money(month.income)}</td>
-              <td>${number(month.lessons || month.transactions)}</td>
-              ${hasHours ? `<td>${number(month.hours)}</td><td>${rateOrNA(month.hourlyRate)}</td>` : ""}
-              <td>${rateOrNA(month.avgLessonPrice)}</td>
-              <td>${rateOrNA(month.lessonRate || month.bookingRate)}</td>
+              <td data-sort="${month.date.getTime()}">${escapeHtml(formatMonth(month.date))}</td>
+              <td data-sort="${month.income}">${money(month.income)}</td>
+              <td data-sort="${month.lessons || month.transactions}">${number(month.lessons || month.transactions)}</td>
+              ${hasHours ? `<td data-sort="${month.hours}">${number(month.hours)}</td><td data-sort="${month.hourlyRate}">${rateOrNA(month.hourlyRate)}</td>` : ""}
+              <td data-sort="${month.avgLessonPrice}">${rateOrNA(month.avgLessonPrice)}</td>
+              <td data-sort="${month.lessonRate || month.bookingRate}">${rateOrNA(month.lessonRate || month.bookingRate)}</td>
             </tr>
           `).join("")}
           <tr class="pp-summary-row">
@@ -1689,14 +1690,14 @@
   function renderStudentHeader(hasHours, includeRank = true) {
     return `
       <tr>
-        ${includeRank ? '<th class="pp-head-rank">Rang</th>' : ""}
-        <th class="pp-head-student">Lernende</th>
-        <th class="pp-head-income">Einnahmen</th>
-        <th class="pp-head-lessons">Einheiten</th>
-        <th class="pp-head-balance">Abo</th>
-        ${hasHours ? '<th class="pp-head-hours">Stunden</th><th class="pp-head-hourly">Ø pro Stunde</th>' : ""}
-        <th class="pp-head-price" title="Lesson Price">Preis</th>
-        <th class="pp-head-wage" title="Earning, USD pro bezahlter Einheit">Lohn</th>
+        ${includeRank ? sortableHead("Rang", "pp-head-rank") : ""}
+        ${sortableHead("Lernende", "pp-head-student")}
+        ${sortableHead("Einnahmen", "pp-head-income")}
+        ${sortableHead("Einheiten", "pp-head-lessons")}
+        ${sortableHead("Abo", "pp-head-balance")}
+        ${hasHours ? `${sortableHead("Stunden", "pp-head-hours")}${sortableHead("Ø pro Stunde", "pp-head-hourly")}` : ""}
+        ${sortableHead("Preis", "pp-head-price", "Lesson Price")}
+        ${sortableHead("Ø Lohn", "pp-head-wage", "Earning, USD pro bezahlter Einheit")}
       </tr>
     `;
   }
@@ -1704,16 +1705,27 @@
   function renderStudentRows(students, hasHours, offset = 0, hidden = false, includeRank = true) {
     return students.map((student, index) => `
       <tr${hidden ? ' class="pp-ranking-extra-row pp-hidden"' : ""}>
-        ${includeRank ? `<td class="pp-cell-rank">${student.globalRank || offset + index + 1}</td>` : ""}
-        <td class="pp-cell-student">${escapeHtml(student.student)}</td>
-        <td class="pp-cell-income">${money(student.income)}</td>
-        <td class="pp-cell-lessons">${number(student.lessons || student.transactions)}</td>
-        <td class="pp-cell-balance">${renderBalanceProgress(student)}</td>
-        ${hasHours ? `<td class="pp-cell-hours">${number(student.hours)}</td><td class="pp-cell-hourly">${rateOrNA(student.hourlyRate)}</td>` : ""}
-        <td class="pp-cell-price">${rateOrNA(student.currentPrice)}</td>
-        <td class="pp-cell-wage">${rateOrNA(student.lessonRate)}</td>
+        ${includeRank ? `<td class="pp-cell-rank" data-sort="${student.globalRank || offset + index + 1}">${student.globalRank || offset + index + 1}</td>` : ""}
+        <td class="pp-cell-student" data-sort="${escapeHtml(student.student)}">${escapeHtml(student.student)}</td>
+        <td class="pp-cell-income" data-sort="${student.income}">${money(student.income)}</td>
+        <td class="pp-cell-lessons" data-sort="${student.lessons || student.transactions}">${number(student.lessons || student.transactions)}</td>
+        <td class="pp-cell-balance" data-sort="${student.totalHours || 0}">${renderBalanceProgress(student)}</td>
+        ${hasHours ? `<td class="pp-cell-hours" data-sort="${student.hours}">${number(student.hours)}</td><td class="pp-cell-hourly" data-sort="${student.hourlyRate}">${rateOrNA(student.hourlyRate)}</td>` : ""}
+        <td class="pp-cell-price" data-sort="${student.currentPrice || 0}">${rateOrNA(student.currentPrice)}</td>
+        <td class="pp-cell-wage" data-sort="${student.lessonRate || 0}">${rateOrNA(student.lessonRate)}</td>
       </tr>
     `).join("");
+  }
+
+  function sortableHead(label, className = "", title = "") {
+    return `
+      <th${className ? ` class="${escapeHtml(className)}"` : ""}${title ? ` title="${escapeHtml(title)}"` : ""}>
+        <button class="pp-sort-button" type="button" data-pp-sort-column>
+          <span>${escapeHtml(label)}</span>
+          <span class="pp-sort-indicator" aria-hidden="true"></span>
+        </button>
+      </th>
+    `;
   }
 
   function bindRankingToggle() {
@@ -1735,6 +1747,125 @@
     });
   }
 
+  function bindSortableTables() {
+    document.querySelectorAll("#preply-plus-root .pp-table").forEach((table) => {
+      const headerCells = Array.from(table.tHead?.rows[0]?.cells || []);
+      headerCells.forEach((header, index) => {
+        const button = header.querySelector("[data-pp-sort-column]");
+        if (!button) {
+          return;
+        }
+
+        button.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const nextDirection = table.dataset.ppSortIndex === String(index) && table.dataset.ppSortDirection === "asc" ? "desc" : "asc";
+          sortTableByColumn(table, index, nextDirection);
+        });
+      });
+    });
+  }
+
+  function sortTableByColumn(table, columnIndex, direction) {
+    const isDescending = direction === "desc";
+    table.dataset.ppSortIndex = String(columnIndex);
+    table.dataset.ppSortDirection = direction;
+    updateSortIndicators(table, columnIndex, direction);
+
+    if (table.classList.contains("pp-price-table")) {
+      sortPriceGroupTable(table, columnIndex, isDescending);
+      return;
+    }
+
+    sortSimpleTable(table, columnIndex, isDescending);
+  }
+
+  function updateSortIndicators(table, columnIndex, direction) {
+    Array.from(table.tHead?.rows[0]?.cells || []).forEach((header, index) => {
+      header.setAttribute("aria-sort", index === columnIndex ? (direction === "asc" ? "ascending" : "descending") : "none");
+      const indicator = header.querySelector(".pp-sort-indicator");
+      if (indicator) {
+        indicator.textContent = index === columnIndex ? (direction === "asc" ? "▲" : "▼") : "";
+      }
+    });
+  }
+
+  function sortSimpleTable(table, columnIndex, isDescending) {
+    const body = table.tBodies[0];
+    if (!body) {
+      return;
+    }
+
+    const rows = Array.from(body.children);
+    const sortableRows = rows.filter((row) => !row.classList.contains("pp-summary-row") && !row.classList.contains("pp-ranking-toggle-row"));
+    const summaryRows = rows.filter((row) => row.classList.contains("pp-summary-row"));
+    const toggleRows = rows.filter((row) => row.classList.contains("pp-ranking-toggle-row"));
+
+    if (toggleRows.length && !table.classList.contains("pp-price-detail-table")) {
+      toggleRows.forEach((row) => row.classList.add("pp-hidden"));
+      sortableRows.forEach((row) => row.classList.remove("pp-hidden"));
+    }
+
+    sortableRows
+      .sort((a, b) => compareSortValues(getCellSortValue(a, columnIndex), getCellSortValue(b, columnIndex), isDescending))
+      .forEach((row) => body.appendChild(row));
+    summaryRows.forEach((row) => body.appendChild(row));
+    toggleRows.forEach((row) => body.appendChild(row));
+  }
+
+  function sortPriceGroupTable(table, columnIndex, isDescending) {
+    const body = table.tBodies[0];
+    if (!body) {
+      return;
+    }
+
+    const pairs = [];
+    Array.from(body.children).forEach((row) => {
+      if (row.classList.contains("pp-price-group-row")) {
+        pairs.push({ groupRow: row, detailRow: null });
+        return;
+      }
+
+      if (row.classList.contains("pp-price-detail-row") && pairs.length) {
+        pairs[pairs.length - 1].detailRow = row;
+      }
+    });
+
+    pairs
+      .sort((a, b) => compareSortValues(getCellSortValue(a.groupRow, columnIndex), getCellSortValue(b.groupRow, columnIndex), isDescending))
+      .forEach((pair) => {
+        body.appendChild(pair.groupRow);
+        if (pair.detailRow) {
+          body.appendChild(pair.detailRow);
+        }
+      });
+  }
+
+  function getCellSortValue(row, columnIndex) {
+    const cell = row.cells[columnIndex];
+    if (!cell) {
+      return "";
+    }
+
+    const raw = cell.dataset.sort ?? cell.textContent.trim();
+    const normalizedNumber = parseMoney(raw);
+    if (raw !== "" && Number.isFinite(normalizedNumber) && /^-?[\d\s.,$€]+$/.test(String(raw))) {
+      return normalizedNumber;
+    }
+
+    return String(raw).toLocaleLowerCase("de-DE");
+  }
+
+  function compareSortValues(a, b, isDescending) {
+    let result;
+    if (typeof a === "number" && typeof b === "number") {
+      result = a - b;
+    } else {
+      result = String(a).localeCompare(String(b), "de", { numeric: true, sensitivity: "base" });
+    }
+
+    return isDescending ? -result : result;
+  }
+
   function renderPriceBenchmark(groups) {
     if (!groups.length) {
       return `<p class="pp-empty">Noch keine Preisdaten gefunden. Dafür braucht die CSV die Spalte Lesson Price, USD.</p>`;
@@ -1746,12 +1877,12 @@
       <table class="pp-table pp-price-table">
         <thead>
           <tr>
-            <th title="Lesson Price">Preis</th>
-            <th title="Earning, USD pro bezahlter Einheit">Lohn</th>
-            <th>Details</th>
-            <th>Status</th>
-            <th>Einnahmen</th>
-            <th>Einheiten</th>
+            ${sortableHead("Preis", "", "Lesson Price")}
+            ${sortableHead("Ø Lohn", "", "Earning, USD pro bezahlter Einheit")}
+            ${sortableHead("Details")}
+            ${sortableHead("Status")}
+            ${sortableHead("Einnahmen")}
+            ${sortableHead("Einheiten")}
           </tr>
         </thead>
         <tbody>
@@ -1767,12 +1898,12 @@
     const hasHours = group.students.some((student) => student.hours > 0);
     return `
       <tr class="pp-price-group-row ${group.maxPriority ? `pp-priority-row pp-priority-row-${group.maxPriority}` : ""}" data-pp-group="${groupId}" role="button" tabindex="0" aria-expanded="${isOpen ? "true" : "false"}">
-        <td><span class="pp-row-caret" aria-hidden="true"></span>${escapeHtml(group.label)}</td>
-        <td>${rateOrNA(group.avgEarning)}</td>
-        <td>${number(group.studentCount)} Lernende</td>
-        <td>${renderGroupPriceStatus(group)}</td>
-        <td>${money(group.income)}</td>
-        <td>${number(group.lessons)}</td>
+        <td data-sort="${group.price || 0}"><span class="pp-row-caret" aria-hidden="true"></span>${escapeHtml(group.label)}</td>
+        <td data-sort="${group.avgEarning || 0}">${rateOrNA(group.avgEarning)}</td>
+        <td data-sort="${group.studentCount}">${number(group.studentCount)} Lernende</td>
+        <td data-sort="${group.maxPriority}">${renderGroupPriceStatus(group)}</td>
+        <td data-sort="${group.income}">${money(group.income)}</td>
+        <td data-sort="${group.lessons}">${number(group.lessons)}</td>
       </tr>
       <tr class="pp-price-detail-row ${isOpen ? "" : "pp-hidden"}" data-pp-group-details="${groupId}">
         <td colspan="6">
