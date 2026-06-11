@@ -35,7 +35,6 @@
 .pp-header p,
 .pp-status,
 .pp-card small,
-.pp-insight small,
 .pp-section-note,
 .pp-empty {
   color: #5f6b7a;
@@ -104,8 +103,7 @@
 }
 
 .pp-card,
-.pp-panel,
-.pp-insight {
+.pp-panel {
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #f8fafc;
@@ -116,8 +114,7 @@
   padding: 16px;
 }
 
-.pp-card span,
-.pp-insight span {
+.pp-card span {
   display: block;
   color: #526071;
   font-size: 13px;
@@ -130,13 +127,6 @@
   color: #0f172a;
   font-size: 28px;
   line-height: 1.15;
-}
-
-.pp-split {
-  display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
-  gap: 8px;
-  margin-top: 8px;
 }
 
 .pp-panel {
@@ -633,25 +623,6 @@
   line-height: 1.3;
 }
 
-.pp-insights {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.pp-insight {
-  min-height: 92px;
-  padding: 12px;
-}
-
-.pp-insight strong {
-  display: block;
-  margin: 8px 0 4px;
-  color: #0f172a;
-  font-size: 20px;
-  line-height: 1.2;
-}
-
 .pp-empty {
   margin: 0;
 }
@@ -677,12 +648,7 @@
     padding: 16px;
   }
 
-  .pp-grid,
-  .pp-split {
-    grid-template-columns: 1fr;
-  }
-
-  .pp-insights {
+  .pp-grid {
     grid-template-columns: 1fr;
   }
 }

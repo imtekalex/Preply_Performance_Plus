@@ -1426,22 +1426,17 @@
         </div>
         ${renderMonthlyBreakdown(state.monthlyBreakdown)}
       </div>
-      <div class="pp-split">
-        <div class="pp-panel">
-          <h3>Lernenden-Ranking</h3>
-          ${renderStudentTable(state.topStudents)}
-        </div>
-        <div class="pp-panel">
-          <h3>Weitere Kennzahlen</h3>
-          <div class="pp-insights">
-            ${insight("Ø Einheiten pro Monat", number(state.metrics.avgMonthlyLessons), "seit Beginn")}
-            ${state.metrics.avgWeeklyHours
-              ? insight("Ø Wochenstunden", `${number(state.metrics.avgWeeklyHours)} h`, "seit Beginn")
-              : insight("Ø Einheiten pro Woche", number(state.metrics.avgWeeklyLessons), "seit Beginn")}
-            ${insight("Lernende insgesamt", number(state.metrics.totalStudents), "seit Beginn")}
-            ${insight("Aktive Lernende", number(state.metrics.activeStudents), "aktuell")}
-          </div>
-        </div>
+      <div class="pp-grid pp-wide-panel">
+        ${metricCard("Ø Einheiten pro Monat", number(state.metrics.avgMonthlyLessons), "seit Beginn")}
+        ${state.metrics.avgWeeklyHours
+          ? metricCard("Ø Wochenstunden", `${number(state.metrics.avgWeeklyHours)} h`, "seit Beginn")
+          : metricCard("Ø Einheiten pro Woche", number(state.metrics.avgWeeklyLessons), "seit Beginn")}
+        ${metricCard("Lernende insgesamt", number(state.metrics.totalStudents), "seit Beginn")}
+        ${metricCard("Aktive Lernende", number(state.metrics.activeStudents), "aktuell")}
+      </div>
+      <div class="pp-panel pp-wide-panel">
+        <h3>Lernenden-Ranking</h3>
+        ${renderStudentTable(state.topStudents)}
       </div>
       <div class="pp-panel pp-wide-panel">
         <h3>Preisvergleich aktiver Lernender</h3>
@@ -2038,16 +2033,6 @@
     }
 
     return "";
-  }
-
-  function insight(label, value, detail = "") {
-    return `
-      <div class="pp-insight">
-        <span>${escapeHtml(label)}</span>
-        <strong>${escapeHtml(String(value || "n/a"))}</strong>
-        <small>${escapeHtml(detail)}</small>
-      </div>
-    `;
   }
 
   function projectMonth(currentIncome) {
