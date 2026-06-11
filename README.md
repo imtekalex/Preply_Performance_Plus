@@ -10,6 +10,15 @@ Chrome extension that augments `https://preply.com/de/performance` with income a
 4. Select this folder.
 5. Open or reload `https://preply.com/de/performance`.
 
+## Project structure
+
+- `manifest.json`: Chrome extension registration, content-script order, permissions, and web-accessible bridge files
+- `src/shared.js`: shared message names and operation constants used by the content script and page bridge
+- `src/utils.js`: formatting, parsing, date, number, and HTML escaping helpers
+- `src/content.js`: Preply page integration, data orchestration, cache handling, analytics state, and UI rendering
+- `src/injected.js`: small page-context bridge for authenticated Preply CSV and GraphQL requests
+- `src/styles.css`: injected dashboard styles
+
 ## How data is collected
 
 The extension first tries to fetch Preply's own earnings report endpoint in the page context:
