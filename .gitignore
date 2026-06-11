@@ -3,6 +3,16 @@ Thumbs.db
 *.log
 *.zip
 *.crx
+*.csv
+*.tsv
+*.xls
+*.xlsx
+*.sqlite
+*.db
+.env
+.env.*
+exports/
+reports/
 dist/
 build/
 node_modules/

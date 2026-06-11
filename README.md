@@ -16,11 +16,15 @@ The extension first tries to fetch Preply's own earnings report endpoint in the 
 
 `/tutor/download-earnings-report?timestampStart=YYYY-MM-DD&timestampEnd=YYYY-MM-DD&format=csv`
 
-That keeps the request authenticated with the existing Preply session and avoids opening the report dialog. To avoid unnecessary traffic, the extension stores parsed CSV transactions and the latest current-student snapshot in `chrome.storage.local`. The first successful run reads the membership month from the performance page text, for example `seit du im November 2025 beigetreten bist`, and requests CSV data from the first day of that month. If that text is unavailable, it falls back to `2000-01-01`. Later page loads only request the missing CSV date range. If the cache already reaches today, no CSV request is made on page load. The current-student snapshot is reused for the rest of the local day. The refresh button fetches the current CSV day, merges it into the existing history, and reloads the full current-student list. The `Löschen` link asks for confirmation, deletes stored CSV and student data, and rebuilds both from scratch.
+That keeps the request authenticated with the existing Preply session and avoids opening the report dialog. To avoid unnecessary traffic, the extension stores parsed CSV transactions and the latest current-student snapshot in `chrome.storage.local`. The first successful run reads the membership month from the performance page text, for example `seit du im [Monat] [Jahr] beigetreten bist`, and requests CSV data from the first day of that month. If that text is unavailable, it falls back to `2000-01-01`. Later page loads only request the missing CSV date range. If the cache already reaches today, no CSV request is made on page load. The current-student snapshot is reused for the rest of the local day. The refresh button fetches the current CSV day, merges it into the existing history, and reloads the full current-student list. The `Löschen` link asks for confirmation, deletes stored CSV and student data, and rebuilds both from scratch.
 
 The parser explicitly supports Preply CSV columns such as `Schüler`, `Datum der Einheit`, `Type`, `Earning, USD`, and `Lesson Price, USD`. It intentionally uses `Earning, USD` for tutor income and `Lesson Price, USD` for the current student price in the ranking.
 
 The extension also queries Preply's `TutorStudentManagement` GraphQL operation from a small page-context bridge at `/graphql/v2/TutorStudentManagement`. That provides the current-student list, status, next lesson, and balance utilisation. The request includes Apollo CSRF preflight headers because Preply's GraphQL endpoint blocks ambiguous browser requests. When this request is available, active-student ranking and price benchmarking use Preply's current-student list instead of the CSV-only recent-lessons fallback.
+
+## Privacy
+
+This repository must not contain exported CSV reports, screenshots with learner names, local cache dumps, or other personal data. Runtime data stays in the user's browser via `chrome.storage.local`; it is not committed to the repository and is removed by the in-panel `Löschen` action. `.gitignore` excludes common report/export formats such as CSV, TSV, Excel files, local databases, archives, and build artifacts.
 
 The panel always shows an update timestamp in German, for example:
 
@@ -57,9 +61,9 @@ The status is intentionally simple:
 If the student ranking stays empty, open DevTools on the Preply performance page and run:
 
 ```js
-fetch('/tutor/download-earnings-report?timestampStart=2026-01-01&timestampEnd=2026-06-07&format=csv', { credentials: 'include' })
+fetch('/tutor/download-earnings-report?timestampStart=YYYY-MM-DD&timestampEnd=YYYY-MM-DD&format=csv', { credentials: 'include' })
   .then(r => r.text())
-  .then(t => console.log(t.slice(0, 1000)))
+  .then(t => console.log(t.split(/\r?\n/, 1)[0]))
 ```
 
-The first CSV header line is enough to adjust the column inference in `src/content.js`.
+Only the first CSV header line is needed to adjust the column inference in `src/content.js`; do not paste rows with learner names or earnings into issues or commits.

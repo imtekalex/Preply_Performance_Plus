@@ -3,6 +3,7 @@
   const MESSAGE_RESPONSE = "PREPLY_PLUS_REPORTS_RESULT";
   const STUDENT_MESSAGE_REQUEST = "PREPLY_PLUS_FETCH_STUDENTS";
   const STUDENT_MESSAGE_RESPONSE = "PREPLY_PLUS_STUDENTS_RESULT";
+  const STUDENT_OPERATION_NAME = "TutorStudentManagement";
 
   async function fetchReport(range) {
     const url = new URL("/tutor/download-earnings-report", window.location.origin);
@@ -32,7 +33,11 @@
   }
 
   async function fetchStudents({ operationName, variables, query }) {
-    const endpoint = `/graphql/v2/${encodeURIComponent(operationName || "TutorStudentManagement")}`;
+    if (operationName !== STUDENT_OPERATION_NAME || !String(query || "").includes("studentManagementTutorings")) {
+      throw new Error("Unsupported GraphQL operation");
+    }
+
+    const endpoint = `/graphql/v2/${STUDENT_OPERATION_NAME}`;
     const response = await fetch(new URL(endpoint, window.location.origin).toString(), {
       method: "POST",
       credentials: "include",
@@ -40,10 +45,10 @@
         Accept: "application/json",
         "Apollo-Require-Preflight": "true",
         "Content-Type": "application/json",
-        "X-Apollo-Operation-Name": operationName || "TutorStudentManagement"
+        "X-Apollo-Operation-Name": STUDENT_OPERATION_NAME
       },
       body: JSON.stringify({
-        operationName,
+        operationName: STUDENT_OPERATION_NAME,
         variables,
         query
       })
