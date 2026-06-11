@@ -102,7 +102,7 @@
 
     const sharedScript = document.createElement("script");
     sharedScript.id = "preply-plus-shared";
-    sharedScript.src = chrome.runtime.getURL("src/shared.js");
+    sharedScript.src = chrome.runtime.getURL("src/protocol.js");
     sharedScript.onload = () => {
       sharedScript.remove();
       injectPageBridgeScript();
@@ -113,7 +113,7 @@
   function injectPageBridgeScript() {
     const script = document.createElement("script");
     script.id = "preply-plus-injected";
-    script.src = chrome.runtime.getURL("src/injected.js");
+    script.src = chrome.runtime.getURL("src/page-bridge.js");
     script.onload = () => script.remove();
     (document.head || document.documentElement).appendChild(script);
   }

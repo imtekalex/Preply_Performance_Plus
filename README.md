@@ -13,11 +13,11 @@ Chrome extension that augments `https://preply.com/de/performance` with income a
 ## Project structure
 
 - `manifest.json`: Chrome extension registration, content-script order, permissions, and web-accessible bridge files
-- `src/shared.js`: shared message names and operation constants used by the content script and page bridge
-- `src/utils.js`: formatting, parsing, date, number, and HTML escaping helpers
-- `src/content.js`: Preply page integration, data orchestration, cache handling, analytics state, and UI rendering
-- `src/injected.js`: small page-context bridge for authenticated Preply CSV and GraphQL requests
-- `src/styles.css`: injected dashboard styles
+- `src/protocol.js`: shared message names and operation constants used by the dashboard and page bridge
+- `src/formatting.js`: formatting, parsing, date, number, and HTML escaping helpers
+- `src/dashboard.js`: Preply page integration, data orchestration, cache handling, analytics state, and UI rendering
+- `src/page-bridge.js`: small page-context bridge for authenticated Preply CSV and GraphQL requests
+- `src/dashboard.css`: injected dashboard styles
 
 ## How data is collected
 
@@ -75,4 +75,4 @@ fetch('/tutor/download-earnings-report?timestampStart=YYYY-MM-DD&timestampEnd=YY
   .then(t => console.log(t.split(/\r?\n/, 1)[0]))
 ```
 
-Only the first CSV header line is needed to adjust the column inference in `src/content.js`; do not paste rows with learner names or earnings into issues or commits.
+Only the first CSV header line is needed to adjust the column inference in `src/dashboard.js`; do not paste rows with learner names or earnings into issues or commits.
