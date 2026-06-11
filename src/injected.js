@@ -1,9 +1,5 @@
 (() => {
-  const MESSAGE_REQUEST = "PREPLY_PLUS_FETCH_REPORTS";
-  const MESSAGE_RESPONSE = "PREPLY_PLUS_REPORTS_RESULT";
-  const STUDENT_MESSAGE_REQUEST = "PREPLY_PLUS_FETCH_STUDENTS";
-  const STUDENT_MESSAGE_RESPONSE = "PREPLY_PLUS_STUDENTS_RESULT";
-  const STUDENT_OPERATION_NAME = "TutorStudentManagement";
+  const { messageTypes: MESSAGE_TYPES, studentOperationName: STUDENT_OPERATION_NAME } = window.__PREPLY_PLUS_SHARED__;
 
   async function fetchReport(range) {
     const url = new URL("/tutor/download-earnings-report", window.location.origin);
@@ -76,14 +72,14 @@
       return;
     }
 
-    if (event.data?.type === STUDENT_MESSAGE_REQUEST) {
+    if (event.data?.type === MESSAGE_TYPES.studentsRequest) {
       const { requestId, operationName, variables, query } = event.data;
 
       try {
         const result = await fetchStudents({ operationName, variables, query });
         window.postMessage(
           {
-            type: STUDENT_MESSAGE_RESPONSE,
+            type: MESSAGE_TYPES.studentsResponse,
             requestId,
             ...result
           },
@@ -92,7 +88,7 @@
       } catch (error) {
         window.postMessage(
           {
-            type: STUDENT_MESSAGE_RESPONSE,
+            type: MESSAGE_TYPES.studentsResponse,
             requestId,
             error: error instanceof Error ? error.message : String(error)
           },
@@ -102,7 +98,7 @@
       return;
     }
 
-    if (event.data?.type !== MESSAGE_REQUEST) {
+    if (event.data?.type !== MESSAGE_TYPES.reportsRequest) {
       return;
     }
 
@@ -123,7 +119,7 @@
 
     window.postMessage(
       {
-        type: MESSAGE_RESPONSE,
+        type: MESSAGE_TYPES.reportsResponse,
         requestId,
         reports,
         errors

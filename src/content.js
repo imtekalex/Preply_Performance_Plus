@@ -1,9 +1,6 @@
 (() => {
   const ROOT_ID = "preply-plus-root";
-  const MESSAGE_REQUEST = "PREPLY_PLUS_FETCH_REPORTS";
-  const MESSAGE_RESPONSE = "PREPLY_PLUS_REPORTS_RESULT";
-  const STUDENT_MESSAGE_REQUEST = "PREPLY_PLUS_FETCH_STUDENTS";
-  const STUDENT_MESSAGE_RESPONSE = "PREPLY_PLUS_STUDENTS_RESULT";
+  const { messageTypes: MESSAGE_TYPES, studentOperationName: STUDENT_OPERATION_NAME } = window.__PREPLY_PLUS_SHARED__;
   const DAY_MS = 24 * 60 * 60 * 1000;
   const CACHE_KEY = "preplyPlusTransactionCache";
   const STUDENT_CACHE_KEY = "preplyPlusStudentCache";
@@ -11,7 +8,7 @@
   const STUDENT_CACHE_VERSION = 3;
   const DEFAULT_HISTORY_START = "2000-01-01";
   const STUDENT_PAGE_SIZE = 20;
-  const STUDENT_MANAGEMENT_QUERY = `query TutorStudentManagement($offset: Int!, $count: Int!, $archivedByTutor: Boolean, $orderField: TutoringSortFieldsEnum!, $orderDirection: CommonSortDirectionsEnum!, $includeOngoing: Boolean!, $clientName: String, $statuses: [TutoringStatusEnum!], $smartFilter: TutoringSmartFilter) {
+  const STUDENT_MANAGEMENT_QUERY = `query ${STUDENT_OPERATION_NAME}($offset: Int!, $count: Int!, $archivedByTutor: Boolean, $orderField: TutoringSortFieldsEnum!, $orderDirection: CommonSortDirectionsEnum!, $includeOngoing: Boolean!, $clientName: String, $statuses: [TutoringStatusEnum!], $smartFilter: TutoringSmartFilter) {
   currentUser {
     id
     tutor {
@@ -116,6 +113,17 @@
       return;
     }
 
+    const sharedScript = document.createElement("script");
+    sharedScript.id = "preply-plus-shared";
+    sharedScript.src = chrome.runtime.getURL("src/shared.js");
+    sharedScript.onload = () => {
+      sharedScript.remove();
+      injectPageBridgeScript();
+    };
+    (document.head || document.documentElement).appendChild(sharedScript);
+  }
+
+  function injectPageBridgeScript() {
     const script = document.createElement("script");
     script.id = "preply-plus-injected";
     script.src = chrome.runtime.getURL("src/injected.js");
@@ -129,7 +137,7 @@
         return;
       }
 
-      if (event.data?.type === MESSAGE_RESPONSE) {
+      if (event.data?.type === MESSAGE_TYPES.reportsResponse) {
         if (!pendingRequest || event.data.requestId !== pendingRequest.requestId) {
           return;
         }
@@ -138,7 +146,7 @@
         return;
       }
 
-      if (event.data?.type === STUDENT_MESSAGE_RESPONSE) {
+      if (event.data?.type === MESSAGE_TYPES.studentsResponse) {
         if (!pendingStudentRequest || event.data.requestId !== pendingStudentRequest.requestId) {
           return;
         }
@@ -297,7 +305,7 @@
         }
       };
 
-      window.postMessage({ type: MESSAGE_REQUEST, requestId, ranges }, window.location.origin);
+      window.postMessage({ type: MESSAGE_TYPES.reportsRequest, requestId, ranges }, window.location.origin);
     });
   }
 
@@ -411,9 +419,9 @@
       };
 
       window.postMessage({
-        type: STUDENT_MESSAGE_REQUEST,
+        type: MESSAGE_TYPES.studentsRequest,
         requestId,
-        operationName: "TutorStudentManagement",
+        operationName: STUDENT_OPERATION_NAME,
         variables: {
           offset,
           count,
